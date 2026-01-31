@@ -42,8 +42,8 @@ const App = {
      * Setup navigation between views
      */
     setupNavigation() {
+        // Desktop navigation
         const navButtons = document.querySelectorAll('.nav-btn');
-
         navButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const viewName = btn.dataset.view;
@@ -54,6 +54,78 @@ const App = {
                 btn.classList.add('active');
             });
         });
+
+        // Mobile navigation
+        const mobileNavButtons = document.querySelectorAll('.mobile-nav-btn');
+        mobileNavButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const viewName = btn.dataset.view;
+                this.switchView(viewName);
+
+                // Update active state for both desktop and mobile
+                navButtons.forEach(b => b.classList.remove('active'));
+                mobileNavButtons.forEach(b => b.classList.remove('active'));
+
+                // Find matching buttons
+                document.querySelectorAll(`[data-view="${viewName}"]`).forEach(b => {
+                    b.classList.add('active');
+                });
+
+                // Close mobile menu
+                this.closeMobileMenu();
+            });
+        });
+
+        // Mobile menu toggle
+        this.setupMobileMenu();
+    },
+
+    /**
+     * Setup mobile menu open/close
+     */
+    setupMobileMenu() {
+        const menuBtn = document.getElementById('mobileMenuBtn');
+        const closeBtn = document.getElementById('mobileMenuClose');
+        const overlay = document.getElementById('mobileMenuOverlay');
+
+        if (menuBtn) {
+            menuBtn.addEventListener('click', () => this.openMobileMenu());
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeMobileMenu());
+        }
+
+        // Close on overlay click
+        if (overlay) {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    this.closeMobileMenu();
+                }
+            });
+        }
+    },
+
+    /**
+     * Open mobile menu
+     */
+    openMobileMenu() {
+        const overlay = document.getElementById('mobileMenuOverlay');
+        if (overlay) {
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+    },
+
+    /**
+     * Close mobile menu
+     */
+    closeMobileMenu() {
+        const overlay = document.getElementById('mobileMenuOverlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            document.body.style.overflow = ''; // Restore scrolling
+        }
     },
 
     /**
