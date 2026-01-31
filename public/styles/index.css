@@ -213,9 +213,10 @@ body {
 /* ----- Desk Grid ----- */
 .desk-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(2, 1fr);
   gap: var(--space-lg);
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
 }
 
@@ -919,7 +920,16 @@ body {
 }
 
 /* ----- Responsive ----- */
-/* デスクグリッドは常に2列固定 */
+/* 基本は横6列×縦2行 */
+
+/* タブレット縦・小さめPC */
+@media (max-width: 1200px) {
+  .desk-grid {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 1024px) {
   .app-header {
     flex-wrap: wrap;
@@ -935,10 +945,18 @@ body {
   .stats-overview {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .desk-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+  }
 }
 
-@media (max-width: 768px) {
+/* スマホ縦画面 */
+@media (max-width: 768px) and (orientation: portrait) {
   .desk-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(6, 1fr);
     gap: var(--space-md);
   }
 

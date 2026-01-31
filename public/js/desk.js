@@ -28,26 +28,24 @@ const Desk = {
     // ローカル設定を取得（各ユーザーのブラウザに保存）
     const localSettings = this.getLocalSettings();
 
-    // 左右反転: デスクの順序を逆にする（1,2,3... → 2,1,4,3... 各行内で反転）
+    // グリッドの列数を取得（レスポンシブ対応）
+    const colCount = this.getGridColumns();
+
+    // 左右反転: 各行内でデスクの順序を逆にする
     if (localSettings.flipHorizontal) {
-      // 2列なので、ペアごとに入れ替え
       const flippedDesks = [];
-      for (let i = 0; i < desks.length; i += 2) {
-        if (desks[i + 1]) {
-          flippedDesks.push(desks[i + 1], desks[i]);
-        } else {
-          flippedDesks.push(desks[i]);
-        }
+      for (let i = 0; i < desks.length; i += colCount) {
+        const row = desks.slice(i, i + colCount);
+        flippedDesks.push(...row.reverse());
       }
       desks = flippedDesks;
     }
 
-    // 上下反転: 行の順序を逆にする（1,2 / 3,4 / 5,6 → 11,12 / 9,10 / 7,8...）
+    // 上下反転: 行の順序を逆にする
     if (localSettings.flipVertical) {
       const flippedDesks = [];
-      const rowSize = 2;
-      for (let i = desks.length - rowSize; i >= 0; i -= rowSize) {
-        for (let j = 0; j < rowSize && i + j < desks.length; j++) {
+      for (let i = desks.length - colCount; i >= 0; i -= colCount) {
+        for (let j = 0; j < colCount && i + j < desks.length; j++) {
           flippedDesks.push(desks[i + j]);
         }
       }
@@ -88,6 +86,23 @@ const Desk = {
   saveLocalSettings(settings) {
     localStorage.setItem('support-desk-local-settings', JSON.stringify(settings));
     this.render();
+  },
+
+  /**
+   * Get current grid column count based on screen size
+   */
+  getGridColumns() {
+    const width = window.innerWidth;
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+    if (width <= 768 && isPortrait) {
+      return 2; // スマホ縦画面: 2列
+    } else if (width <= 1024) {
+      return 3; // タブレット: 3列
+    } else if (width <= 1200) {
+      return 4; // 小さめPC: 4列
+    }
+    return 6; // デスクトップ: 6列
   },
 
   /**
