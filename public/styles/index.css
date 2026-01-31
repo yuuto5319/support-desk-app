@@ -1066,15 +1066,22 @@ body {
 }
 
 @media (max-width: 1024px) {
-  .app-header {
-    flex-wrap: wrap;
-    gap: var(--space-md);
+
+  /* タブレット以下はハンバーガーメニューを使用 */
+  .app-nav {
+    display: none;
   }
 
-  .app-nav {
-    order: 3;
-    width: 100%;
-    justify-content: center;
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .app-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .app-logo span {
+    display: none;
   }
 
   .stats-overview {
@@ -1085,30 +1092,14 @@ body {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(4, 1fr);
   }
+
+  .main-content {
+    padding: var(--space-md);
+  }
 }
 
-/* スマホ横画面・縦画面共通 */
+/* スマホ（768px以下） */
 @media (max-width: 768px) {
-
-  /* デスクトップナビを非表示 */
-  .app-nav {
-    display: none;
-  }
-
-  /* ハンバーガーメニューを表示 */
-  .mobile-menu-btn {
-    display: flex;
-  }
-
-  /* ヘッダーをコンパクトに */
-  .app-header {
-    padding: var(--space-sm) var(--space-md);
-  }
-
-  .app-logo span {
-    display: none;
-  }
-
   .app-logo svg {
     width: 28px;
     height: 28px;
