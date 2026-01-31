@@ -33,13 +33,15 @@ const Settings = {
      */
     renderDisplaySettings() {
         const settings = State.getSettings();
+        // 反転設定はローカル（各ユーザーのブラウザに保存）
+        const localSettings = Desk.getLocalSettings();
 
         const flipVertical = document.getElementById('flipVertical');
         const flipHorizontal = document.getElementById('flipHorizontal');
         const enableNotifications = document.getElementById('enableNotifications');
 
-        if (flipVertical) flipVertical.checked = settings.flipVertical || false;
-        if (flipHorizontal) flipHorizontal.checked = settings.flipHorizontal || false;
+        if (flipVertical) flipVertical.checked = localSettings.flipVertical || false;
+        if (flipHorizontal) flipHorizontal.checked = localSettings.flipHorizontal || false;
         if (enableNotifications) enableNotifications.checked = settings.enableNotifications !== false;
     },
 
@@ -119,13 +121,19 @@ const Settings = {
 
         if (flipVertical) {
             flipVertical.addEventListener('change', (e) => {
-                State.updateSettings({ flipVertical: e.target.checked });
+                // ローカル設定として保存（各ユーザー固有）
+                const localSettings = Desk.getLocalSettings();
+                localSettings.flipVertical = e.target.checked;
+                Desk.saveLocalSettings(localSettings);
             });
         }
 
         if (flipHorizontal) {
             flipHorizontal.addEventListener('change', (e) => {
-                State.updateSettings({ flipHorizontal: e.target.checked });
+                // ローカル設定として保存（各ユーザー固有）
+                const localSettings = Desk.getLocalSettings();
+                localSettings.flipHorizontal = e.target.checked;
+                Desk.saveLocalSettings(localSettings);
             });
         }
 

@@ -4,55 +4,100 @@
  */
 
 const Desk = {
-    /**
-     * Initialize desk functionality
-     */
-    init() {
-        this.render();
+  /**
+   * Initialize desk functionality
+   */
+  init() {
+    this.render();
 
-        // Listen for state changes
-        State.addListener(() => this.render());
-    },
+    // Listen for state changes
+    State.addListener(() => this.render());
+  },
 
-    /**
-     * Render all desk cards
-     */
-    render() {
-        const grid = document.getElementById('deskGrid');
-        if (!grid) return;
+  /**
+   * Render all desk cards
+   */
+  render() {
+    const grid = document.getElementById('deskGrid');
+    if (!grid) return;
 
-        const desks = State.getDesks();
-        const statuses = State.getStatuses();
-        const settings = State.getSettings();
+    let desks = [...State.getDesks()];
+    const statuses = State.getStatuses();
+    const settings = State.getSettings();
 
-        // Update grid flip classes
-        grid.classList.remove('flip-vertical', 'flip-horizontal', 'flip-both');
-        if (settings.flipVertical && settings.flipHorizontal) {
-            grid.classList.add('flip-both');
-        } else if (settings.flipVertical) {
-            grid.classList.add('flip-vertical');
-        } else if (settings.flipHorizontal) {
-            grid.classList.add('flip-horizontal');
+    // ローカル設定を取得（各ユーザーのブラウザに保存）
+    const localSettings = this.getLocalSettings();
+
+    // 左右反転: デスクの順序を逆にする（1,2,3... → 2,1,4,3... 各行内で反転）
+    if (localSettings.flipHorizontal) {
+      // 2列なので、ペアごとに入れ替え
+      const flippedDesks = [];
+      for (let i = 0; i < desks.length; i += 2) {
+        if (desks[i + 1]) {
+          flippedDesks.push(desks[i + 1], desks[i]);
+        } else {
+          flippedDesks.push(desks[i]);
         }
+      }
+      desks = flippedDesks;
+    }
 
-        // Render desk cards
-        grid.innerHTML = desks.map(desk => this.renderCard(desk, statuses)).join('');
+    // 上下反転: 行の順序を逆にする（1,2 / 3,4 / 5,6 → 11,12 / 9,10 / 7,8...）
+    if (localSettings.flipVertical) {
+      const flippedDesks = [];
+      const rowSize = 2;
+      for (let i = desks.length - rowSize; i >= 0; i -= rowSize) {
+        for (let j = 0; j < rowSize && i + j < desks.length; j++) {
+          flippedDesks.push(desks[i + j]);
+        }
+      }
+      desks = flippedDesks;
+    }
 
-        // Setup event handlers for each desk
-        desks.forEach(desk => {
-            this.setupCardHandlers(desk.id);
-            Memo.setupMemoHandlers(desk.id);
-        });
-    },
+    // Render desk cards
+    grid.innerHTML = desks.map(desk => this.renderCard(desk, statuses)).join('');
 
-    /**
-     * Render a single desk card
-     */
-    renderCard(desk, statuses) {
-        const currentStatus = statuses.find(s => s.id === desk.status) || statuses[0];
-        const statusDuration = Date.now() - desk.statusStartTime;
+    // Setup event handlers for each desk
+    desks.forEach(desk => {
+      this.setupCardHandlers(desk.id);
+      Memo.setupMemoHandlers(desk.id);
+    });
+  },
 
-        return `
+  /**
+   * Get local settings (user-specific, stored in localStorage)
+   */
+  getLocalSettings() {
+    const saved = localStorage.getItem('support-desk-local-settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return {
+      flipVertical: false,
+      flipHorizontal: false
+    };
+  },
+
+  /**
+   * Save local settings
+   */
+  saveLocalSettings(settings) {
+    localStorage.setItem('support-desk-local-settings', JSON.stringify(settings));
+    this.render();
+  },
+
+  /**
+   * Render a single desk card
+   */
+  renderCard(desk, statuses) {
+    const currentStatus = statuses.find(s => s.id === desk.status) || statuses[0];
+    const statusDuration = Date.now() - desk.statusStartTime;
+
+    return `
       <div class="desk-card status-${desk.status}" data-desk-id="${desk.id}">
         <div class="desk-header">
           <span class="desk-number">DESK ${desk.number}</span>
@@ -88,46 +133,46 @@ const Desk = {
         ${Memo.renderMemoSection(desk)}
       </div>
     `;
-    },
+  },
 
-    /**
-     * Setup event handlers for a desk card
-     */
-    setupCardHandlers(deskId) {
-        const statusButtons = document.querySelectorAll(`.status-option[data-desk-id="${deskId}"]`);
+  /**
+   * Setup event handlers for a desk card
+   */
+  setupCardHandlers(deskId) {
+    const statusButtons = document.querySelectorAll(`.status-option[data-desk-id="${deskId}"]`);
 
-        statusButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const status = button.dataset.status;
-                this.changeStatus(deskId, status);
-            });
-        });
-    },
+    statusButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const status = button.dataset.status;
+        this.changeStatus(deskId, status);
+      });
+    });
+  },
 
-    /**
-     * Change desk status
-     */
-    changeStatus(deskId, newStatus) {
-        State.updateDesk(deskId, { status: newStatus });
-    },
+  /**
+   * Change desk status
+   */
+  changeStatus(deskId, newStatus) {
+    State.updateDesk(deskId, { status: newStatus });
+  },
 
-    /**
-     * Update status time display (called by interval)
-     */
-    updateStatusTimes() {
-        const desks = State.getDesks();
+  /**
+   * Update status time display (called by interval)
+   */
+  updateStatusTimes() {
+    const desks = State.getDesks();
 
-        desks.forEach(desk => {
-            const card = document.querySelector(`.desk-card[data-desk-id="${desk.id}"]`);
-            if (card) {
-                const timeElement = card.querySelector('.status-time');
-                if (timeElement) {
-                    const duration = Date.now() - desk.statusStartTime;
-                    timeElement.textContent = Utils.formatDuration(duration);
-                }
-            }
-        });
-    }
+    desks.forEach(desk => {
+      const card = document.querySelector(`.desk-card[data-desk-id="${desk.id}"]`);
+      if (card) {
+        const timeElement = card.querySelector('.status-time');
+        if (timeElement) {
+          const duration = Date.now() - desk.statusStartTime;
+          timeElement.textContent = Utils.formatDuration(duration);
+        }
+      }
+    });
+  }
 };
 
 // Export for use in other modules
