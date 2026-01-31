@@ -14,6 +14,7 @@ const State = {
     // Cached data
     desks: [],
     statuses: [],
+    schedules: [],
     settings: {},
 
     // Callback functions for state changes
@@ -175,6 +176,8 @@ const State = {
                 enableNotifications: true
             };
         }
+
+        this.schedules = [];
     },
 
     /**
@@ -370,6 +373,24 @@ const State = {
         this.settings = { ...this.settings, ...updates };
         this.notifyListeners();
     },
+
+    // --- Schedule Methods ---
+    getSchedules() {
+        return this.schedules;
+    },
+
+    setSchedules(schedules) {
+        this.schedules = schedules;
+    },
+
+    addSchedule(schedule) {
+        this.schedules.push(schedule);
+    },
+
+    removeSchedule(id) {
+        this.schedules = this.schedules.filter(s => s.id !== id);
+    },
+    // ------------------------
 
     /**
      * Add listener for state changes

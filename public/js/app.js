@@ -17,6 +17,7 @@ const App = {
         // Initialize modules
         Memo.init();
         Desk.init();
+        Schedule.init();
         Stats.init();
         Settings.init();
 
@@ -146,6 +147,8 @@ const App = {
                 Settings.render();
             } else if (viewName === 'dashboard') {
                 Desk.render();
+            } else if (viewName === 'schedule') {
+                Schedule.render();
             }
         }
     },

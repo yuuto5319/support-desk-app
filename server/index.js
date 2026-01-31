@@ -159,6 +159,25 @@ io.on('connection', (socket) => {
         io.to('desks').emit('statuses:updated', allStatuses);
     });
 
+    // Handle schedule add
+    socket.on('schedule:add', (data) => {
+        const { deskId, title, memo, scheduledTime } = data;
+
+        const schedule = db.schedules.add(deskId, title, memo, scheduledTime);
+
+        if (schedule) {
+            io.to('desks').emit('schedule:added', schedule);
+        }
+    });
+
+    // Handle schedule delete
+    socket.on('schedule:delete', (data) => {
+        const { scheduleId } = data;
+
+        db.schedules.delete(scheduleId);
+        io.to('desks').emit('schedule:deleted', { scheduleId });
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
         console.log(`Client disconnected: ${socket.id}`);
@@ -175,12 +194,14 @@ async function startServer() {
     const desksRoutes = require('./routes/desks');
     const statsRoutes = require('./routes/stats');
     const settingsRoutes = require('./routes/settings');
+    const schedulesRoutes = require('./routes/schedules');
 
     // API Routes
     app.use('/api/auth', authRoutes);
     app.use('/api/desks', desksRoutes);
     app.use('/api/stats', statsRoutes);
     app.use('/api/settings', settingsRoutes);
+    app.use('/api/schedules', schedulesRoutes);
 
     // Health check endpoint
     app.get('/api/health', (req, res) => {

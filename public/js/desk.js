@@ -112,8 +112,14 @@ const Desk = {
     const currentStatus = statuses.find(s => s.id === desk.status) || statuses[0];
     const statusDuration = Date.now() - desk.statusStartTime;
 
+    // Get schedule info
+    const schedules = State.getSchedules() || [];
+    const deskSchedules = schedules.filter(s => s.desk_id === desk.id);
+    const nextSchedule = this.getNextSchedule(deskSchedules);
+    const hasImminentSchedule = nextSchedule && this.isImminent(nextSchedule.scheduled_time);
+
     return `
-      <div class="desk-card status-${desk.status}" data-desk-id="${desk.id}">
+      <div class="desk-card status-${desk.status} ${hasImminentSchedule ? 'schedule-imminent' : ''}" data-desk-id="${desk.id}">
         <div class="desk-header">
           <span class="desk-number">DESK ${desk.number}</span>
           <span class="call-count">
@@ -132,6 +138,14 @@ const Desk = {
             ${currentStatus.name}
           </div>
           <div class="status-time">${Utils.formatDuration(statusDuration)}</div>
+          
+          ${nextSchedule ? `
+            <div class="next-schedule ${hasImminentSchedule ? 'imminent' : ''}">
+              <span class="schedule-icon">📅</span>
+              <span class="schedule-time">${nextSchedule.scheduled_time}</span>
+              <span class="schedule-title">${Utils.truncate(nextSchedule.title, 10)}</span>
+            </div>
+          ` : ''}
         </div>
         
         <div class="status-selector">
@@ -146,8 +160,54 @@ const Desk = {
         </div>
         
         ${Memo.renderMemoSection(desk)}
+        
+        <button class="add-schedule-btn" data-desk-id="${desk.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <line x1="12" y1="14" x2="12" y2="14" />
+          </svg>
+          スケジュール追加
+        </button>
       </div>
     `;
+  },
+
+  /**
+   * Get next schedule for a desk
+   */
+  getNextSchedule(schedules) {
+    if (!schedules || schedules.length === 0) return null;
+
+    const now = new Date();
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTimeVal = currentHours * 60 + currentMinutes;
+
+    // Sort and find first future schedule
+    return schedules
+      .sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time))
+      .find(s => {
+        const [h, m] = s.scheduled_time.split(':').map(Number);
+        const timeVal = h * 60 + m;
+        return timeVal >= currentTimeVal;
+      });
+  },
+
+  /**
+   * Check if schedule is imminent (within 15 mins)
+   */
+  isImminent(timeStr) {
+    const now = new Date();
+    const [h, m] = timeStr.split(':').map(Number);
+    const scheduleTime = new Date();
+    scheduleTime.setHours(h, m, 0, 0);
+
+    const diff = scheduleTime - now;
+    // Within 15 minutes (900000ms) and not in past
+    return diff >= 0 && diff <= 900000;
   },
 
   /**
@@ -162,6 +222,14 @@ const Desk = {
         this.changeStatus(deskId, status);
       });
     });
+
+    // Add Schedule Button
+    const addScheduleBtn = document.querySelector(`.add-schedule-btn[data-desk-id="${deskId}"]`);
+    if (addScheduleBtn) {
+      addScheduleBtn.addEventListener('click', () => {
+        Schedule.openAddModal(deskId);
+      });
+    }
   },
 
   /**

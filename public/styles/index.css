@@ -1054,6 +1054,195 @@ body {
   color: var(--text-primary);
 }
 
+/* ----- Schedule ----- */
+.schedule-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.schedule-header {
+  margin-bottom: var(--space-lg);
+}
+
+.schedule-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.schedule-item {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  align-items: center;
+  border: 1px solid var(--border-color);
+}
+
+.schedule-item.past {
+  opacity: 0.6;
+  background: var(--bg-tertiary);
+}
+
+.schedule-time-col {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.schedule-info-col {
+  flex: 1;
+}
+
+.schedule-desk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.desk-badge {
+  background: var(--accent-primary-alpha);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.schedule-item .operator-name {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.schedule-item .schedule-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.schedule-memo {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.schedule-action-col {
+  margin-left: var(--space-md);
+}
+
+.delete-schedule-btn {
+  color: var(--text-muted);
+}
+
+.delete-schedule-btn:hover {
+  color: var(--status-calling);
+  background: var(--status-calling-alpha);
+}
+
+.schedule-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  text-align: center;
+  color: var(--text-muted);
+  gap: var(--space-md);
+}
+
+.schedule-empty svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+}
+
+/* Desk Card Schedule Additions */
+.schedule-imminent {
+  border: 2px solid var(--status-afterwork);
+  /* Yellowish warning */
+  animation: borderPulse 2s infinite;
+}
+
+@keyframes borderPulse {
+  0% {
+    border-color: var(--status-afterwork);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+  }
+
+  70% {
+    border-color: var(--status-afterwork);
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+
+  100% {
+    border-color: var(--status-afterwork);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.next-schedule {
+  margin-top: var(--space-xs);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.next-schedule.imminent {
+  color: var(--status-afterwork);
+  background: rgba(245, 158, 11, 0.1);
+  font-weight: 600;
+}
+
+.add-schedule-btn {
+  width: 100%;
+  margin-top: var(--space-sm);
+  padding: 6px;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.add-schedule-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.add-schedule-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Modal Styling */
+.schedule-desk-info {
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
 /* ----- Responsive ----- */
 /* 基本は横6列×縦2行 */
 

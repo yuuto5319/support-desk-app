@@ -136,6 +136,18 @@ function initializeTables() {
     )
   `);
 
+  // Schedules table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      desk_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      memo TEXT DEFAULT '',
+      scheduled_time TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('Database tables initialized');
 }
 
@@ -371,6 +383,55 @@ const dbOperations = {
       } else {
         return runQuery('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)', [key, jsonValue, now]);
       }
+    }
+  },
+
+  // Schedule operations
+  schedules: {
+    getToday: () => {
+      const today = new Date().toISOString().split('T')[0];
+      return queryAll(`
+        SELECT s.*, d.number as desk_number, d.operator_name
+        FROM schedules s
+        LEFT JOIN desks d ON s.desk_id = d.id
+        WHERE DATE(s.scheduled_time) = ?
+        ORDER BY s.scheduled_time ASC
+      `, [today]);
+    },
+    getByDesk: (deskId) => {
+      const today = new Date().toISOString().split('T')[0];
+      return queryAll(`
+        SELECT * FROM schedules
+        WHERE desk_id = ? AND DATE(scheduled_time) = ?
+        ORDER BY scheduled_time ASC
+      `, [deskId, today]);
+    },
+    add: (deskId, title, memo, scheduledTime) => {
+      const result = runQuery(
+        'INSERT INTO schedules (desk_id, title, memo, scheduled_time) VALUES (?, ?, ?, ?)',
+        [deskId, title, memo || '', scheduledTime]
+      );
+      if (result) {
+        // Get the inserted schedule with desk info
+        const lastId = queryOne('SELECT last_insert_rowid() as id');
+        if (lastId) {
+          return queryOne(`
+            SELECT s.*, d.number as desk_number, d.operator_name
+            FROM schedules s
+            LEFT JOIN desks d ON s.desk_id = d.id
+            WHERE s.id = ?
+          `, [lastId.id]);
+        }
+      }
+      return null;
+    },
+    delete: (id) => {
+      return runQuery('DELETE FROM schedules WHERE id = ?', [id]);
+    },
+    deleteOld: () => {
+      // Delete schedules older than today
+      const today = new Date().toISOString().split('T')[0];
+      return runQuery('DELETE FROM schedules WHERE DATE(scheduled_time) < ?', [today]);
     }
   }
 };
