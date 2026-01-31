@@ -1164,6 +1164,105 @@ body {
   }
 }
 
+/* スマホ横画面 */
+@media (max-width: 926px) and (orientation: landscape) {
+
+  /* ハンバーガーメニューを表示 */
+  .app-nav {
+    display: none;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* ヘッダーをコンパクトに */
+  .app-header {
+    padding: var(--space-xs) var(--space-md);
+  }
+
+  .app-logo span {
+    display: none;
+  }
+
+  .app-logo svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* グリッドは6列×2行を維持 */
+  .desk-grid {
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: var(--space-xs);
+  }
+
+  .main-content {
+    padding: var(--space-xs);
+  }
+
+  /* デスクカードをコンパクトに */
+  .desk-card {
+    padding: var(--space-xs);
+  }
+
+  .operator-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 0.875rem;
+  }
+
+  .operator-name {
+    font-size: 0.75rem;
+  }
+
+  .status-badge {
+    font-size: 0.6rem;
+    padding: 2px 6px;
+  }
+
+  .status-time {
+    font-size: 0.6rem;
+  }
+
+  .status-selector {
+    gap: 2px;
+  }
+
+  .status-option {
+    padding: 2px;
+    font-size: 0.5rem;
+  }
+
+  .status-option .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .memo-section {
+    display: none;
+    /* 横画面ではメモセクションを非表示 */
+  }
+
+  .desk-header {
+    margin-bottom: var(--space-xs);
+  }
+
+  .desk-number {
+    font-size: 0.6rem;
+    padding: 2px 4px;
+  }
+
+  .call-count {
+    font-size: 0.6rem;
+  }
+
+  .call-count svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
 @media (max-width: 480px) {
   .desk-card {
     padding: var(--space-md);
