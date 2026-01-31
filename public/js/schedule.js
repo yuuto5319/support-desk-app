@@ -23,9 +23,9 @@ const Schedule = {
             empty: document.getElementById('scheduleEmpty'),
             addModal: document.getElementById('scheduleAddModal'),
             closeAddBtn: document.getElementById('closeScheduleAdd'),
+            openAddBtn: document.getElementById('openScheduleAddBtn'),
             addForm: {
-                deskId: document.getElementById('scheduleAddDeskId'),
-                deskInfo: document.getElementById('scheduleAddDeskInfo'),
+                deskSelect: document.getElementById('scheduleAddDeskSelect'),
                 title: document.getElementById('scheduleAddTitle'),
                 time: document.getElementById('scheduleAddTime'),
                 memo: document.getElementById('scheduleAddMemo'),
@@ -42,6 +42,13 @@ const Schedule = {
         if (this.dom.closeAddBtn) {
             this.dom.closeAddBtn.addEventListener('click', () => {
                 this.closeAddModal();
+            });
+        }
+
+        // Open Modal Button (FAB)
+        if (this.dom.openAddBtn) {
+            this.dom.openAddBtn.addEventListener('click', () => {
+                this.openAddModal();
             });
         }
 
@@ -66,28 +73,22 @@ const Schedule = {
      * Setup socket listeners
      */
     setupSocketListeners() {
-        if (!window.socket) return;
+        // Wait for State to initialize socket if not ready
+        if (!State.socket) {
+            setTimeout(() => this.setupSocketListeners(), 500);
+            return;
+        }
 
-        socket.on('schedule:added', (schedule) => {
+        State.socket.on('schedule:added', (schedule) => {
             State.addSchedule(schedule);
             this.render();
-            Desk.render(); // Update desk cards (to show schedule indicators)
-
-            // Show notification if configured
-            /*
-            if (Notification.permission === 'granted') {
-                new Notification(`新しいスケジュール: ${schedule.operatorName || 'Desk ' + schedule.desk_number}`, {
-                    body: `${schedule.scheduled_time} - ${schedule.title}`,
-                    icon: '/favicon.ico'
-                });
-            }
-            */
+            if (window.Desk) Desk.render(); // Update desk cards (to show schedule indicators)
         });
 
-        socket.on('schedule:deleted', (data) => {
+        State.socket.on('schedule:deleted', (data) => {
             State.removeSchedule(data.scheduleId);
             this.render();
-            Desk.render(); // Update desk cards
+            if (window.Desk) Desk.render(); // Update desk cards
         });
     },
 
@@ -110,12 +111,27 @@ const Schedule = {
     /**
      * Open add schedule modal
      */
-    openAddModal(deskId) {
-        const desk = State.getDesks().find(d => d.id === deskId);
-        if (!desk) return;
+    openAddModal() {
+        const desks = State.getDesks();
+        if (!desks.length) {
+            alert('デスクデータが読み込まれていません。');
+            return;
+        }
 
-        this.dom.addForm.deskId.value = deskId;
-        this.dom.addForm.deskInfo.textContent = `DESK ${desk.number} (${desk.operatorName || '未割当'}) へのスケジュール追加`;
+        // Populate desk select
+        const select = this.dom.addForm.deskSelect;
+        select.innerHTML = '<option value="">選択してください</option>';
+
+        desks.forEach(desk => {
+            const option = document.createElement('option');
+            option.value = desk.id;
+            // Show operator name if available, otherwise desk number
+            const label = desk.operatorName
+                ? `DESK ${desk.number} (${desk.operatorName})`
+                : `DESK ${desk.number}`;
+            option.textContent = label;
+            select.appendChild(option);
+        });
 
         // Set default time to now + 30 mins, rounded to nearest 5 mins
         const now = new Date();
@@ -141,10 +157,15 @@ const Schedule = {
      * Handle add schedule submit
      */
     handleAddSubmit() {
-        const deskId = this.dom.addForm.deskId.value;
+        const deskId = this.dom.addForm.deskSelect.value;
         const title = this.dom.addForm.title.value.trim();
         const time = this.dom.addForm.time.value;
         const memo = this.dom.addForm.memo.value.trim();
+
+        if (!deskId) {
+            alert('担当者（デスク）を選択してください');
+            return;
+        }
 
         if (!title || !time) {
             alert('タイトルと時間は必須です');
@@ -152,12 +173,31 @@ const Schedule = {
         }
 
         // Send to server
-        socket.emit('schedule:add', {
-            deskId,
-            title,
-            memo,
-            scheduledTime: time // 'HH:mm' format
-        });
+        if (State.socket && State.socket.connected) {
+            State.socket.emit('schedule:add', {
+                deskId,
+                title,
+                memo,
+                scheduledTime: time // 'HH:mm' format
+            });
+        } else {
+            // Fallback to API if socket not connected
+            fetch('/api/schedules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deskId, title, memo, scheduledTime: time })
+            })
+                .then(res => res.json())
+                .then(schedule => {
+                    State.addSchedule(schedule);
+                    this.render();
+                    if (window.Desk) Desk.render();
+                })
+                .catch(err => {
+                    console.error('Schedule add failed:', err);
+                    alert('スケジュールの追加に失敗しました。');
+                });
+        }
 
         this.closeAddModal();
     },
@@ -168,7 +208,16 @@ const Schedule = {
     deleteSchedule(id) {
         if (!confirm('このスケジュールを削除しますか？')) return;
 
-        socket.emit('schedule:delete', { scheduleId: id });
+        if (State.socket && State.socket.connected) {
+            State.socket.emit('schedule:delete', { scheduleId: id });
+        } else {
+            fetch(`/api/schedules/${id}`, { method: 'DELETE' })
+                .then(() => {
+                    State.removeSchedule(id);
+                    this.render();
+                    if (window.Desk) Desk.render();
+                });
+        }
     },
 
     /**

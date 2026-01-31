@@ -78,16 +78,16 @@ const Utils = {
       console.log('This browser does not support notifications');
       return false;
     }
-    
+
     if (Notification.permission === 'granted') {
       return true;
     }
-    
+
     if (Notification.permission !== 'denied') {
       const permission = await Notification.requestPermission();
       return permission === 'granted';
     }
-    
+
     return false;
   },
 
@@ -182,6 +182,15 @@ const Utils = {
   getMonthStartString() {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  },
+
+  /**
+   * Truncate string
+   */
+  truncate(str, length) {
+    if (!str) return '';
+    if (str.length <= length) return str;
+    return str.slice(0, length) + '...';
   }
 };
 

@@ -160,17 +160,6 @@ const Desk = {
         </div>
         
         ${Memo.renderMemoSection(desk)}
-        
-        <button class="add-schedule-btn" data-desk-id="${desk.id}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-            <line x1="12" y1="14" x2="12" y2="14" />
-          </svg>
-          スケジュール追加
-        </button>
       </div>
     `;
   },
@@ -222,14 +211,6 @@ const Desk = {
         this.changeStatus(deskId, status);
       });
     });
-
-    // Add Schedule Button
-    const addScheduleBtn = document.querySelector(`.add-schedule-btn[data-desk-id="${deskId}"]`);
-    if (addScheduleBtn) {
-      addScheduleBtn.addEventListener('click', () => {
-        Schedule.openAddModal(deskId);
-      });
-    }
   },
 
   /**
