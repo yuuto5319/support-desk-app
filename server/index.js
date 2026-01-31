@@ -68,6 +68,21 @@ io.on('connection', (socket) => {
     // Join the main room
     socket.join('desks');
 
+    // Helper function to format desk data for frontend
+    function formatDesksForClient(desks) {
+        return desks.map(d => ({
+            id: d.id,
+            number: d.number,
+            operatorName: d.operator_name,
+            status: d.status_id,
+            statusName: d.status_name,
+            statusColor: d.status_color,
+            statusStartTime: new Date(d.status_start_time).getTime(),
+            callCount: d.call_count,
+            memo: d.memo || ''
+        }));
+    }
+
     // Handle desk status change
     socket.on('desk:changeStatus', (data) => {
         const { deskId, statusId } = data;
@@ -79,7 +94,7 @@ io.on('connection', (socket) => {
         const desks = db.desks.getAll();
 
         // Broadcast to all clients
-        io.to('desks').emit('desks:updated', desks);
+        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
     });
 
     // Handle memo update
@@ -98,7 +113,7 @@ io.on('connection', (socket) => {
         const desks = db.desks.getAll();
 
         // Broadcast to all clients
-        io.to('desks').emit('desks:updated', desks);
+        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
         io.to('desks').emit('memo:updated', { deskId, memo, updatedBy: socket.username });
     });
 
@@ -109,7 +124,7 @@ io.on('connection', (socket) => {
         db.desks.updateOperator(deskId, operatorName);
 
         const desks = db.desks.getAll();
-        io.to('desks').emit('desks:updated', desks);
+        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
     });
 
     // Handle settings update
