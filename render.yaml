@@ -1,0 +1,16 @@
+# Render用設定ファイル
+services:
+  - type: web
+    name: support-desk-app
+    runtime: node
+    region: singapore  # 日本から近いリージョン
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true  # 自動生成
+      - key: PORT
+        value: 10000
