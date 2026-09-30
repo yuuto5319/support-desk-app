@@ -43,18 +43,18 @@ const Memo = {
           <input type="text" 
                  class="memo-input" 
                  placeholder="メモを入力..." 
-                 data-desk-id="${desk.id}"
+                 data-desk-id="${Utils.escapeHtml(desk.id)}"
                  value=""
           />
-          <button class="memo-send-btn" data-desk-id="${desk.id}" title="メモを送信">
+          <button class="memo-send-btn" data-desk-id="${Utils.escapeHtml(desk.id)}" title="メモを送信">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22,2 15,22 11,13 2,9"/>
             </svg>
           </button>
         </div>
-        <div class="memo-display" id="memo-display-${desk.id}">${desk.memo || ''}</div>
-        <button class="memo-history-btn" data-desk-id="${desk.id}">履歴を表示</button>
+        <div class="memo-display" id="memo-display-${Utils.escapeHtml(desk.id)}">${Utils.escapeHtml(desk.memo)}</div>
+        <button class="memo-history-btn" data-desk-id="${Utils.escapeHtml(desk.id)}">履歴を表示</button>
       </div>
     `;
     },
@@ -152,7 +152,7 @@ const Memo = {
             list.innerHTML = history.map(item => `
         <div class="memo-history-item">
           <div class="memo-history-time">${Utils.formatDateTime(item.timestamp)}</div>
-          <div class="memo-history-content">${this.escapeHtml(item.content)}</div>
+          <div class="memo-history-content">${Utils.escapeHtml(item.content)}</div>
         </div>
       `).join('');
         }
@@ -168,15 +168,6 @@ const Memo = {
         const modal = document.getElementById('memoHistoryModal');
         modal.classList.remove('active');
         this.currentHistoryDeskId = null;
-    },
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 };
 

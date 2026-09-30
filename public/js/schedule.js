@@ -102,6 +102,7 @@ const Schedule = {
                 const schedules = await response.json();
                 State.setSchedules(schedules);
                 this.render();
+                if (window.Desk) Desk.render(); // Show next-schedule indicators on desk cards
             }
         } catch (err) {
             console.error('Failed to fetch schedules:', err);
@@ -245,12 +246,12 @@ const Schedule = {
             return `
                 <div class="schedule-item ${isPast ? 'past' : ''}">
                     <div class="schedule-time-col">
-                        <span class="schedule-time">${schedule.scheduled_time}</span>
+                        <span class="schedule-time">${Utils.escapeHtml(schedule.scheduled_time)}</span>
                     </div>
                     <div class="schedule-info-col">
                         <div class="schedule-desk">
-                            <span class="desk-badge">DESK ${schedule.desk_number}</span>
-                            <span class="operator-name">${schedule.operatorName || '未割当'}</span>
+                            <span class="desk-badge">DESK ${Utils.escapeHtml(schedule.desk_number)}</span>
+                            <span class="operator-name">${Utils.escapeHtml(schedule.operator_name || '未割当')}</span>
                         </div>
                         <div class="schedule-title">${Utils.escapeHtml(schedule.title)}</div>
                         ${schedule.memo ? `<div class="schedule-memo">${Utils.escapeHtml(schedule.memo)}</div>` : ''}

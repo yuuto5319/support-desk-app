@@ -4,6 +4,7 @@
 
 const express = require('express');
 const db = require('../db');
+const { isNonEmptyString, isValidMemo } = require('../validate');
 
 const router = express.Router();
 
@@ -59,12 +60,17 @@ router.get('/:id', (req, res) => {
 router.patch('/:id/status', (req, res) => {
     const { statusId } = req.body;
 
-    if (!statusId) {
+    if (!isNonEmptyString(statusId)) {
         return res.status(400).json({ error: 'ステータスIDが必要です' });
     }
 
     try {
-        db.desks.updateStatus(req.params.id, statusId);
+        if (!db.statuses.getAll().some(s => s.id === statusId)) {
+            return res.status(400).json({ error: 'ステータスが存在しません' });
+        }
+        if (!db.desks.updateStatus(req.params.id, statusId)) {
+            return res.status(404).json({ error: 'デスクが見つかりません' });
+        }
 
         const desks = db.desks.getAll();
         const io = req.app.get('io');
@@ -92,7 +98,14 @@ router.patch('/:id/status', (req, res) => {
 router.patch('/:id/memo', (req, res) => {
     const { memo } = req.body;
 
+    if (memo !== undefined && memo !== null && !isValidMemo(memo)) {
+        return res.status(400).json({ error: 'メモの形式が正しくありません' });
+    }
+
     try {
+        if (!db.desks.getById(req.params.id)) {
+            return res.status(404).json({ error: 'デスクが見つかりません' });
+        }
         db.desks.updateMemo(req.params.id, memo || '');
 
         if (memo) {
@@ -145,12 +158,15 @@ router.get('/:id/memo-history', (req, res) => {
 router.patch('/:id/operator', (req, res) => {
     const { operatorName } = req.body;
 
-    if (!operatorName) {
+    if (!isNonEmptyString(operatorName, 50)) {
         return res.status(400).json({ error: 'オペレーター名が必要です' });
     }
 
     try {
-        db.desks.updateOperator(req.params.id, operatorName);
+        if (!db.desks.getById(req.params.id)) {
+            return res.status(404).json({ error: 'デスクが見つかりません' });
+        }
+        db.desks.updateOperator(req.params.id, operatorName.trim());
 
         const desks = db.desks.getAll();
         const io = req.app.get('io');
