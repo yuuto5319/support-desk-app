@@ -13,10 +13,35 @@ const Settings = {
 
         // Listen for state changes
         State.addListener(() => {
-            if (document.getElementById('settingsView').classList.contains('active')) {
-                this.render();
+            const view = document.getElementById('settingsView');
+            if (!view.classList.contains('active')) return;
+
+            // Don't wipe an input the user is editing (text, color picker); re-render once they leave it
+            if (this.isEditing(view)) {
+                this.pendingRender = true;
+                return;
             }
+            this.render();
         });
+
+        // Apply updates that arrived while an input was being edited
+        document.getElementById('settingsView').addEventListener('focusout', () => {
+            if (!this.pendingRender) return;
+            // Wait until focus has moved (and any 'change' handler has run)
+            setTimeout(() => {
+                if (this.isEditing(document.getElementById('settingsView'))) return;
+                this.pendingRender = false;
+                this.render();
+            }, 0);
+        });
+    },
+
+    /**
+     * Whether the user is currently editing an input inside the view
+     */
+    isEditing(view) {
+        const el = document.activeElement;
+        return view.contains(el) && el.matches('input[type="text"], input[type="color"]');
     },
 
     /**
@@ -32,8 +57,7 @@ const Settings = {
      * Render display settings
      */
     renderDisplaySettings() {
-        const settings = State.getSettings();
-        // 反転設定はローカル（各ユーザーのブラウザに保存）
+        // 反転・通知の設定はローカル（各ユーザーのブラウザに保存）
         const localSettings = Desk.getLocalSettings();
 
         const flipVertical = document.getElementById('flipVertical');
@@ -42,7 +66,7 @@ const Settings = {
 
         if (flipVertical) flipVertical.checked = localSettings.flipVertical || false;
         if (flipHorizontal) flipHorizontal.checked = localSettings.flipHorizontal || false;
-        if (enableNotifications) enableNotifications.checked = settings.enableNotifications !== false;
+        if (enableNotifications) enableNotifications.checked = localSettings.enableNotifications !== false;
     },
 
     /**
@@ -150,7 +174,8 @@ const Settings = {
                         return;
                     }
                 }
-                State.updateSettings({ enableNotifications: e.target.checked });
+                // Notifications are per browser, so this is not sent to the server
+                Desk.updateLocalSettings({ enableNotifications: e.target.checked });
             });
         }
 

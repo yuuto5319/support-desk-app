@@ -84,8 +84,13 @@ const Utils = {
     }
 
     if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
+      try {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      } catch (e) {
+        console.warn('Notification permission request failed:', e.message);
+        return false;
+      }
     }
 
     return false;
@@ -95,12 +100,16 @@ const Utils = {
    * Send desktop notification
    */
   sendNotification(title, body, icon = '📞') {
-    if (Notification.permission === 'granted') {
+    // iPhone Safari has no Notification API, and Android Chrome throws on `new Notification()`
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
       new Notification(title, {
         body,
         icon: `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>${icon}</text></svg>`,
         tag: 'support-desk-notification'
       });
+    } catch (e) {
+      console.warn('Notification failed:', e.message);
     }
   },
 

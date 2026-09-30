@@ -127,23 +127,15 @@ router.delete('/statuses/:id', (req, res) => {
     }
 
     try {
-        db.statuses.delete(statusId);
+        if (!db.statuses.delete(statusId)) {
+            return res.status(500).json({ error: 'ステータスの削除に失敗しました' });
+        }
 
         const allStatuses = db.statuses.getAll();
 
         // Broadcast to all clients (desks on the deleted status were moved back to 'available')
         const io = req.app.get('io');
-        io.to('desks').emit('desks:updated', db.desks.getAll().map(d => ({
-            id: d.id,
-            number: d.number,
-            operatorName: d.operator_name,
-            status: d.status_id,
-            statusName: d.status_name,
-            statusColor: d.status_color,
-            statusStartTime: new Date(d.status_start_time).getTime(),
-            callCount: d.call_count,
-            memo: d.memo || ''
-        })));
+        io.to('desks').emit('desks:updated', db.desks.getAllForClient());
         io.to('desks').emit('statuses:updated', allStatuses.map(s => ({
             id: s.id,
             name: s.name,

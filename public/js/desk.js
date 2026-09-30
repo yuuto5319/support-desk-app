@@ -52,6 +52,10 @@ const Desk = {
       desks = flippedDesks;
     }
 
+    // Keep what users are typing in memo inputs across the re-render
+    // (other clients' updates re-render the whole grid)
+    const drafts = this.captureMemoDrafts(grid);
+
     // Render desk cards
     grid.innerHTML = desks.map(desk => this.renderCard(desk, statuses)).join('');
 
@@ -60,32 +64,87 @@ const Desk = {
       this.setupCardHandlers(desk.id);
       Memo.setupMemoHandlers(desk.id);
     });
+
+    this.restoreMemoDrafts(grid, drafts);
   },
 
   /**
-   * Get local settings (user-specific, stored in localStorage)
+   * Save memo input values, focus and cursor position before re-rendering
+   */
+  captureMemoDrafts(grid) {
+    const drafts = { values: {}, focus: null };
+    grid.querySelectorAll('.memo-input').forEach(input => {
+      if (input.value) drafts.values[input.dataset.deskId] = input.value;
+      if (input === document.activeElement) {
+        drafts.focus = {
+          deskId: input.dataset.deskId,
+          start: input.selectionStart,
+          end: input.selectionEnd
+        };
+      }
+    });
+    return drafts;
+  },
+
+  /**
+   * Restore memo drafts captured by captureMemoDrafts()
+   */
+  restoreMemoDrafts(grid, drafts) {
+    grid.querySelectorAll('.memo-input').forEach(input => {
+      const deskId = input.dataset.deskId;
+      if (drafts.values[deskId] !== undefined) input.value = drafts.values[deskId];
+      if (drafts.focus && drafts.focus.deskId === deskId) {
+        input.focus();
+        input.setSelectionRange(drafts.focus.start, drafts.focus.end);
+      }
+    });
+  },
+
+  /**
+   * Get local settings (per browser, stored in localStorage):
+   * desk layout flips, theme and notifications
    */
   getLocalSettings() {
-    const saved = localStorage.getItem('support-desk-local-settings');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return {
+    const defaults = {
       flipVertical: false,
-      flipHorizontal: false
+      flipHorizontal: false,
+      theme: null, // null = not chosen yet (falls back to the shared server setting)
+      enableNotifications: true
     };
+    try {
+      const saved = localStorage.getItem('support-desk-local-settings');
+      if (saved) {
+        return { ...defaults, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      // ignore (storage unavailable or invalid JSON)
+    }
+    return defaults;
   },
 
   /**
    * Save local settings
    */
   saveLocalSettings(settings) {
-    localStorage.setItem('support-desk-local-settings', JSON.stringify(settings));
+    try {
+      localStorage.setItem('support-desk-local-settings', JSON.stringify(settings));
+    } catch (e) {
+      // ignore (storage unavailable)
+    }
     this.render();
+  },
+
+  /**
+   * Update some local settings without re-rendering the grid
+   */
+  updateLocalSettings(updates) {
+    const settings = { ...this.getLocalSettings(), ...updates };
+    try {
+      localStorage.setItem('support-desk-local-settings', JSON.stringify(settings));
+    } catch (e) {
+      // ignore (storage unavailable)
+    }
+    return settings;
   },
 
   /**

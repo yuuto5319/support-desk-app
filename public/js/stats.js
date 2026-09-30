@@ -1,9 +1,18 @@
 /**
  * Support Desk App - Stats Module
- * Handles statistics calculation and reporting
+ * Handles statistics reporting (aggregated on the server)
  */
 
+const PERIOD_LABELS = {
+    today: '本日',
+    week: '今週（月曜から）',
+    month: '今月'
+};
+
 const Stats = {
+    // Ignore responses from older requests when the period changes quickly
+    requestSeq: 0,
+
     /**
      * Initialize stats functionality
      */
@@ -35,92 +44,51 @@ const Stats = {
         }
     },
 
-    /**
-     * Render stats view
-     */
-    async render() {
-        await this.fetchAndRenderStats();
+    getPeriod() {
+        return document.getElementById('statsPeriod')?.value || 'today';
     },
 
     /**
      * Fetch stats from server and render
      */
-    async fetchAndRenderStats() {
-        const period = document.getElementById('statsPeriod')?.value || 'today';
+    async render() {
+        const period = this.getPeriod();
+        const seq = ++this.requestSeq;
 
         try {
-            const res = await fetch(`/api/stats?period=${period}`);
-            if (res.ok) {
-                const data = await res.json();
-                this.renderOverviewWithData(data.totals);
-                this.renderTableWithData(data.stats);
-            } else {
-                // Fall back to local calculation
-                this.renderOverview();
-                this.renderTable();
-            }
+            const res = await fetch(`/api/stats?period=${encodeURIComponent(period)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (seq !== this.requestSeq) return;
+
+            this.renderOverview(data.totals, data.period);
+            this.renderTable(data.stats, data.statuses);
         } catch (err) {
-            // Fall back to local calculation
-            this.renderOverview();
-            this.renderTable();
+            console.error('Error fetching stats:', err);
+            if (seq !== this.requestSeq) return;
+            this.renderError();
         }
     },
 
     /**
-     * Calculate stats for all operators (fallback)
+     * Render overview cards
      */
-    calculateStats() {
-        const desks = State.getDesks();
-
-        const stats = {};
-
-        // Initialize stats for each operator
-        desks.forEach(desk => {
-            stats[desk.operatorName] = {
-                operatorName: desk.operatorName,
-                callCount: desk.callCount || 0,
-                totalCallingTime: 0,
-                totalAvailableTime: 0,
-                totalAfterworkTime: 0,
-                totalBreakTime: 0,
-                totalAwayTime: 0
-            };
-        });
-
-        return Object.values(stats);
-    },
-
-    /**
-     * Calculate totals
-     */
-    calculateTotals(stats) {
-        return {
-            totalCalls: stats.reduce((sum, s) => sum + s.callCount, 0),
-            totalCallingTime: stats.reduce((sum, s) => sum + s.totalCallingTime, 0),
-            averageCallTime: stats.reduce((sum, s) => sum + s.callCount, 0) > 0
-                ? stats.reduce((sum, s) => sum + s.totalCallingTime, 0) / stats.reduce((sum, s) => sum + s.callCount, 0)
-                : 0,
-            activeOperators: stats.filter(s => s.callCount > 0).length
-        };
-    },
-
-    /**
-     * Render overview cards with server data
-     */
-    renderOverviewWithData(totals) {
+    renderOverview(totals, period) {
         const container = document.getElementById('statsOverview');
         if (!container) return;
+
+        const label = PERIOD_LABELS[period] || PERIOD_LABELS.today;
 
         container.innerHTML = `
       <div class="stat-card">
         <div class="stat-card-label">総通話回数</div>
         <div class="stat-card-value">${totals.totalCalls}</div>
-        <div class="stat-card-sub">本日の通話</div>
+        <div class="stat-card-sub">${label}の通話</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-label">総通話時間</div>
         <div class="stat-card-value">${Utils.formatDuration(totals.totalCallingTime)}</div>
-        <div class="stat-card-sub">累計</div>
+        <div class="stat-card-sub">${label}の累計</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-label">平均通話時間</div>
@@ -136,57 +104,50 @@ const Stats = {
     },
 
     /**
-     * Render overview cards (fallback)
+     * Render stats table (one duration column per status)
      */
-    renderOverview() {
-        const stats = this.calculateStats();
-        const totals = this.calculateTotals(stats);
-        this.renderOverviewWithData(totals);
-    },
-
-    /**
-     * Render stats table with server data
-     */
-    renderTableWithData(stats) {
+    renderTable(stats, statuses) {
+        const head = document.getElementById('statsTableHead');
         const tbody = document.getElementById('statsTableBody');
-        if (!tbody) return;
+        if (!head || !tbody) return;
 
-        tbody.innerHTML = stats.map(s => `
+        head.innerHTML = `
+      <th>オペレーター</th>
+      <th>通話回数</th>
+      <th>平均通話時間</th>
+      ${statuses.map(s => `<th>${Utils.escapeHtml(s.name)}時間</th>`).join('')}
+    `;
+
+        tbody.innerHTML = stats.map(s => {
+            const callingTime = s.durations.calling || 0;
+            return `
       <tr>
         <td>${Utils.escapeHtml(s.operatorName)}</td>
         <td>${s.callCount}</td>
-        <td>${Utils.formatDuration(s.totalCallingTime)}</td>
-        <td>${s.callCount > 0 ? Utils.formatDuration(s.totalCallingTime / s.callCount) : '-'}</td>
-        <td>${Utils.formatDuration(s.totalAvailableTime)}</td>
-        <td>${Utils.formatDuration(s.totalAfterworkTime)}</td>
-        <td>${Utils.formatDuration(s.totalBreakTime)}</td>
+        <td>${s.callCount > 0 ? Utils.formatDuration(callingTime / s.callCount) : '-'}</td>
+        ${statuses.map(status => `<td>${Utils.formatDuration(s.durations[status.id] || 0)}</td>`).join('')}
       </tr>
-    `).join('');
+    `;
+        }).join('');
     },
 
     /**
-     * Render stats table (fallback)
+     * Render an error state when the server cannot be reached
      */
-    renderTable() {
-        const stats = this.calculateStats();
-        this.renderTableWithData(stats);
+    renderError() {
+        const overview = document.getElementById('statsOverview');
+        const tbody = document.getElementById('statsTableBody');
+        if (overview) overview.innerHTML = '';
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">統計を取得できませんでした</td></tr>';
+        }
     },
 
     /**
      * Export stats to CSV via server
      */
     exportToCSV() {
-        const period = document.getElementById('statsPeriod')?.value || 'today';
-
-        // Download CSV from server
-        window.location.href = `/api/stats/export?period=${period}`;
-    },
-
-    /**
-     * Capitalize first letter
-     */
-    capitalizeFirst(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
+        window.location.href = `/api/stats/export?period=${encodeURIComponent(this.getPeriod())}`;
     }
 };
 

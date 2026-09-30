@@ -84,21 +84,6 @@ io.on('connection', (socket) => {
     // Join the main room
     socket.join('desks');
 
-    // Helper function to format desk data for frontend
-    function formatDesksForClient(desks) {
-        return desks.map(d => ({
-            id: d.id,
-            number: d.number,
-            operatorName: d.operator_name,
-            status: d.status_id,
-            statusName: d.status_name,
-            statusColor: d.status_color,
-            statusStartTime: new Date(d.status_start_time).getTime(),
-            callCount: d.call_count,
-            memo: d.memo || ''
-        }));
-    }
-
     // Register a handler that never crashes the process on bad payloads
     const on = (event, handler) => {
         socket.on(event, (data) => {
@@ -119,11 +104,8 @@ io.on('connection', (socket) => {
         // Update database
         if (!db.desks.updateStatus(deskId, statusId)) return;
 
-        // Get updated desk data
-        const desks = db.desks.getAll();
-
         // Broadcast to all clients
-        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
+        io.to('desks').emit('desks:updated', db.desks.getAllForClient());
     });
 
     // Handle memo update
@@ -139,11 +121,8 @@ io.on('connection', (socket) => {
             db.memoHistory.add(deskId, memo, socket.username);
         }
 
-        // Get updated desk data
-        const desks = db.desks.getAll();
-
         // Broadcast to all clients
-        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
+        io.to('desks').emit('desks:updated', db.desks.getAllForClient());
         io.to('desks').emit('memo:updated', { deskId, memo, updatedBy: socket.username });
     });
 
@@ -154,8 +133,7 @@ io.on('connection', (socket) => {
 
         db.desks.updateOperator(deskId, operatorName.trim());
 
-        const desks = db.desks.getAll();
-        io.to('desks').emit('desks:updated', formatDesksForClient(desks));
+        io.to('desks').emit('desks:updated', db.desks.getAllForClient());
     });
 
     // Handle settings update
@@ -198,10 +176,10 @@ io.on('connection', (socket) => {
         const statusId = data?.statusId;
         if (!isNonEmptyString(statusId) || db.DEFAULT_STATUS_IDS.includes(statusId)) return;
 
-        db.statuses.delete(statusId);
+        if (!db.statuses.delete(statusId)) return;
 
         // Desks on the deleted status were moved back to 'available'
-        io.to('desks').emit('desks:updated', formatDesksForClient(db.desks.getAll()));
+        io.to('desks').emit('desks:updated', db.desks.getAllForClient());
         io.to('desks').emit('statuses:updated', db.statuses.getAll());
     });
 

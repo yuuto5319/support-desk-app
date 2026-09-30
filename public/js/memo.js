@@ -91,28 +91,17 @@ const Memo = {
         const memo = input.value.trim();
         if (!memo) return;
 
-        const desk = State.getDesk(deskId);
-        const settings = State.getSettings();
+        // Clear input first so a re-render triggered by the update does not keep the draft
+        input.value = '';
 
         // Update desk memo via API/Socket
+        // (the server's memo:updated broadcast shows the notification, including on this client)
         State.updateMemo(deskId, memo);
 
         // Update display
         const display = document.getElementById(`memo-display-${deskId}`);
         if (display) {
             display.textContent = memo;
-        }
-
-        // Clear input
-        input.value = '';
-
-        // Send notification (local only - server will handle broadcast)
-        if (settings.enableNotifications) {
-            Utils.sendNotification(
-                `${desk?.operatorName || 'デスク'} へのメモ`,
-                memo,
-                '📝'
-            );
         }
     },
 
