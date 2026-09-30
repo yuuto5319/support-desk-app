@@ -102,6 +102,7 @@ const Schedule = {
                 const schedules = await response.json();
                 State.setSchedules(schedules);
                 this.render();
+                if (window.Desk) Desk.render(); // Show next-schedule indicators on desk cards
             }
         } catch (err) {
             console.error('Failed to fetch schedules:', err);
