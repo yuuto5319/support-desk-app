@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { isValidTime } = require('../validate');
 
 // Get today's schedules
 router.get('/', (req, res) => {
@@ -36,6 +37,9 @@ router.post('/', (req, res) => {
 
         if (!deskId || !title || !scheduledTime) {
             return res.status(400).json({ error: 'Missing required fields' });
+        }
+        if (!isValidTime(scheduledTime)) {
+            return res.status(400).json({ error: 'scheduledTime must be HH:MM' });
         }
 
         const schedule = db.schedules.add(deskId, title, memo, scheduledTime);

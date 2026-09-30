@@ -153,7 +153,7 @@ const Stats = {
 
         tbody.innerHTML = stats.map(s => `
       <tr>
-        <td>${s.operatorName}</td>
+        <td>${Utils.escapeHtml(s.operatorName)}</td>
         <td>${s.callCount}</td>
         <td>${Utils.formatDuration(s.totalCallingTime)}</td>
         <td>${s.callCount > 0 ? Utils.formatDuration(s.totalCallingTime / s.callCount) : '-'}</td>

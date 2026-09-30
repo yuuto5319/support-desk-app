@@ -348,6 +348,22 @@ const State = {
     },
 
     /**
+     * Delete a custom status (desks on it are moved back to 'available' by the server)
+     */
+    async deleteStatus(statusId) {
+        if (this.socket?.connected) {
+            this.socket.emit('status:delete', { statusId });
+        } else {
+            await fetch(`/api/settings/statuses/${encodeURIComponent(statusId)}`, {
+                method: 'DELETE'
+            });
+        }
+
+        this.statuses = this.statuses.filter(s => s.id !== statusId);
+        this.notifyListeners();
+    },
+
+    /**
      * Get settings
      */
     getSettings() {

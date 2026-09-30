@@ -12,6 +12,7 @@ const jwt = require('jsonwebtoken');
 
 // Import database
 const db = require('./db');
+const { isValidTime, isNonEmptyString, isValidStatus } = require('./validate');
 
 // Initialize Express
 const app = express();
@@ -138,7 +139,8 @@ io.on('connection', (socket) => {
 
     // Handle status configuration update
     socket.on('statuses:update', (data) => {
-        const { statuses } = data;
+        const statuses = data?.statuses;
+        if (!Array.isArray(statuses) || !statuses.every(isValidStatus)) return;
 
         // Update each status
         for (const status of statuses) {
@@ -159,9 +161,22 @@ io.on('connection', (socket) => {
         io.to('desks').emit('statuses:updated', allStatuses);
     });
 
+    // Handle status delete
+    socket.on('status:delete', (data) => {
+        const statusId = data?.statusId;
+        if (!isNonEmptyString(statusId) || db.DEFAULT_STATUS_IDS.includes(statusId)) return;
+
+        db.statuses.delete(statusId);
+
+        // Desks on the deleted status were moved back to 'available'
+        io.to('desks').emit('desks:updated', formatDesksForClient(db.desks.getAll()));
+        io.to('desks').emit('statuses:updated', db.statuses.getAll());
+    });
+
     // Handle schedule add
     socket.on('schedule:add', (data) => {
-        const { deskId, title, memo, scheduledTime } = data;
+        const { deskId, title, memo, scheduledTime } = data || {};
+        if (!isNonEmptyString(deskId) || !isNonEmptyString(title) || !isValidTime(scheduledTime)) return;
 
         const schedule = db.schedules.add(deskId, title, memo, scheduledTime);
 

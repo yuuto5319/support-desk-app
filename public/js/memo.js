@@ -53,7 +53,7 @@ const Memo = {
             </svg>
           </button>
         </div>
-        <div class="memo-display" id="memo-display-${desk.id}">${desk.memo || ''}</div>
+        <div class="memo-display" id="memo-display-${desk.id}">${Utils.escapeHtml(desk.memo)}</div>
         <button class="memo-history-btn" data-desk-id="${desk.id}">履歴を表示</button>
       </div>
     `;
@@ -152,7 +152,7 @@ const Memo = {
             list.innerHTML = history.map(item => `
         <div class="memo-history-item">
           <div class="memo-history-time">${Utils.formatDateTime(item.timestamp)}</div>
-          <div class="memo-history-content">${this.escapeHtml(item.content)}</div>
+          <div class="memo-history-content">${Utils.escapeHtml(item.content)}</div>
         </div>
       `).join('');
         }
@@ -168,15 +168,6 @@ const Memo = {
         const modal = document.getElementById('memoHistoryModal');
         modal.classList.remove('active');
         this.currentHistoryDeskId = null;
-    },
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 };
 

@@ -191,6 +191,27 @@ const Utils = {
     if (!str) return '';
     if (str.length <= length) return str;
     return str.slice(0, length) + '...';
+  },
+
+  /**
+   * Escape HTML to prevent XSS (safe for both text content and attribute values)
+   */
+  escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  /**
+   * Return the color only if it is '#rrggbb', otherwise a neutral fallback
+   * (prevents CSS injection through style attributes)
+   */
+  safeColor(color) {
+    return /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#6b7280';
   }
 };
 

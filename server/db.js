@@ -144,9 +144,16 @@ function initializeTables() {
       title TEXT NOT NULL,
       memo TEXT DEFAULT '',
       scheduled_time TEXT NOT NULL,
+      scheduled_date TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migration: add scheduled_date to schedules tables created before it existed
+  const scheduleColumns = queryAll('PRAGMA table_info(schedules)').map(c => c.name);
+  if (!scheduleColumns.includes('scheduled_date')) {
+    db.run('ALTER TABLE schedules ADD COLUMN scheduled_date TEXT');
+  }
 
   console.log('Database tables initialized');
 }
@@ -274,6 +281,11 @@ const dbOperations = {
         [id, name, color, maxOrder + 1]);
     },
     delete: (id) => {
+      // Desks left on a deleted status would have no valid status, so move them back to 'available'
+      const desksInStatus = queryAll('SELECT id FROM desks WHERE status_id = ?', [id]);
+      for (const desk of desksInStatus) {
+        dbOperations.desks.updateStatus(desk.id, 'available');
+      }
       return runQuery('DELETE FROM statuses WHERE id = ?', [id]);
     }
   },
@@ -388,52 +400,68 @@ const dbOperations = {
 
   // Schedule operations
   schedules: {
+    // scheduled_time is 'HH:MM' only, so the day is kept in scheduled_date
+    // (server local date, not UTC)
     getToday: () => {
-      const today = new Date().toISOString().split('T')[0];
       return queryAll(`
         SELECT s.*, d.number as desk_number, d.operator_name
         FROM schedules s
         LEFT JOIN desks d ON s.desk_id = d.id
-        WHERE DATE(s.scheduled_time) = ?
+        WHERE s.scheduled_date = ?
         ORDER BY s.scheduled_time ASC
-      `, [today]);
+      `, [getLocalDateString()]);
     },
     getByDesk: (deskId) => {
-      const today = new Date().toISOString().split('T')[0];
       return queryAll(`
         SELECT * FROM schedules
-        WHERE desk_id = ? AND DATE(scheduled_time) = ?
+        WHERE desk_id = ? AND scheduled_date = ?
         ORDER BY scheduled_time ASC
-      `, [deskId, today]);
+      `, [deskId, getLocalDateString()]);
     },
     add: (deskId, title, memo, scheduledTime) => {
-      const result = runQuery(
-        'INSERT INTO schedules (desk_id, title, memo, scheduled_time) VALUES (?, ?, ?, ?)',
-        [deskId, title, memo || '', scheduledTime]
-      );
-      if (result) {
-        // Get the inserted schedule with desk info
+      try {
+        db.run(
+          'INSERT INTO schedules (desk_id, title, memo, scheduled_time, scheduled_date) VALUES (?, ?, ?, ?, ?)',
+          [deskId, title, memo || '', scheduledTime, getLocalDateString()]
+        );
+        // Read the new id before saveDatabase(): db.export() reopens the
+        // connection and resets last_insert_rowid() to 0
         const lastId = queryOne('SELECT last_insert_rowid() as id');
-        if (lastId) {
-          return queryOne(`
-            SELECT s.*, d.number as desk_number, d.operator_name
-            FROM schedules s
-            LEFT JOIN desks d ON s.desk_id = d.id
-            WHERE s.id = ?
-          `, [lastId.id]);
-        }
+        saveDatabase();
+        if (!lastId) return null;
+        return queryOne(`
+          SELECT s.*, d.number as desk_number, d.operator_name
+          FROM schedules s
+          LEFT JOIN desks d ON s.desk_id = d.id
+          WHERE s.id = ?
+        `, [lastId.id]);
+      } catch (err) {
+        console.error('Schedule add error:', err.message);
+        return null;
       }
-      return null;
     },
     delete: (id) => {
       return runQuery('DELETE FROM schedules WHERE id = ?', [id]);
     },
     deleteOld: () => {
-      // Delete schedules older than today
-      const today = new Date().toISOString().split('T')[0];
-      return runQuery('DELETE FROM schedules WHERE DATE(scheduled_time) < ?', [today]);
+      // Delete schedules older than today (rows without a date predate scheduled_date)
+      return runQuery('DELETE FROM schedules WHERE scheduled_date IS NULL OR scheduled_date < ?',
+        [getLocalDateString()]);
     }
   }
 };
 
-module.exports = { initDatabase, saveDatabase, ...dbOperations };
+/**
+ * Get today's date as YYYY-MM-DD in the server's local timezone
+ */
+function getLocalDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Built-in statuses that cannot be deleted
+const DEFAULT_STATUS_IDS = ['available', 'calling', 'afterwork', 'break', 'away'];
+
+module.exports = { initDatabase, saveDatabase, DEFAULT_STATUS_IDS, ...dbOperations };

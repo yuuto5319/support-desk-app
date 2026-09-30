@@ -119,7 +119,7 @@ const Desk = {
     const hasImminentSchedule = nextSchedule && this.isImminent(nextSchedule.scheduled_time);
 
     return `
-      <div class="desk-card status-${desk.status} ${hasImminentSchedule ? 'schedule-imminent' : ''}" data-desk-id="${desk.id}">
+      <div class="desk-card status-${Utils.escapeHtml(desk.status)} ${hasImminentSchedule ? 'schedule-imminent' : ''}" data-desk-id="${desk.id}">
         <div class="desk-header">
           <span class="desk-number">DESK ${desk.number}</span>
           <span class="call-count">
@@ -131,30 +131,30 @@ const Desk = {
         </div>
         
         <div class="operator-info">
-          <div class="operator-avatar">${Utils.getInitials(desk.operatorName)}</div>
-          <div class="operator-name">${desk.operatorName}</div>
-          <div class="status-badge" style="background-color: ${currentStatus.color}">
+          <div class="operator-avatar">${Utils.escapeHtml(Utils.getInitials(desk.operatorName))}</div>
+          <div class="operator-name">${Utils.escapeHtml(desk.operatorName)}</div>
+          <div class="status-badge" style="background-color: ${Utils.safeColor(currentStatus.color)}">
             <span class="pulse"></span>
-            ${currentStatus.name}
+            ${Utils.escapeHtml(currentStatus.name)}
           </div>
           <div class="status-time">${Utils.formatDuration(statusDuration)}</div>
-          
+
           ${nextSchedule ? `
             <div class="next-schedule ${hasImminentSchedule ? 'imminent' : ''}">
               <span class="schedule-icon">📅</span>
-              <span class="schedule-time">${nextSchedule.scheduled_time}</span>
-              <span class="schedule-title">${Utils.truncate(nextSchedule.title, 10)}</span>
+              <span class="schedule-time">${Utils.escapeHtml(nextSchedule.scheduled_time)}</span>
+              <span class="schedule-title">${Utils.escapeHtml(Utils.truncate(nextSchedule.title, 10))}</span>
             </div>
           ` : ''}
         </div>
-        
+
         <div class="status-selector">
           ${statuses.map(status => `
-            <button class="status-option ${desk.status === status.id ? 'active' : ''}" 
-                    data-status="${status.id}"
+            <button class="status-option ${desk.status === status.id ? 'active' : ''}"
+                    data-status="${Utils.escapeHtml(status.id)}"
                     data-desk-id="${desk.id}">
-              <span class="dot" style="background-color: ${status.color}"></span>
-              ${status.name}
+              <span class="dot" style="background-color: ${Utils.safeColor(status.color)}"></span>
+              ${Utils.escapeHtml(status.name)}
             </button>
           `).join('')}
         </div>

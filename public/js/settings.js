@@ -54,27 +54,30 @@ const Settings = {
 
         const statuses = State.getStatuses();
 
-        container.innerHTML = statuses.map(status => `
-      <div class="status-item" data-status-id="${status.id}">
-        <input type="color" 
-               class="status-color-picker" 
-               value="${status.color}"
-               data-status-id="${status.id}"
+        container.innerHTML = statuses.map(status => {
+            const statusId = Utils.escapeHtml(status.id);
+            return `
+      <div class="status-item" data-status-id="${statusId}">
+        <input type="color"
+               class="status-color-picker"
+               value="${Utils.safeColor(status.color)}"
+               data-status-id="${statusId}"
         />
-        <input type="text" 
-               class="status-name-input" 
-               value="${status.name}"
-               data-status-id="${status.id}"
+        <input type="text"
+               class="status-name-input"
+               value="${Utils.escapeHtml(status.name)}"
+               data-status-id="${statusId}"
                placeholder="ステータス名"
         />
-        <button class="status-delete-btn" data-status-id="${status.id}" title="削除">
+        <button class="status-delete-btn" data-status-id="${statusId}" title="削除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </div>
-    `).join('');
+    `;
+        }).join('');
 
         // Setup handlers for each status
         this.setupStatusHandlers();
@@ -96,7 +99,7 @@ const Settings = {
             <span class="desk-number" style="min-width: 60px; text-align: center;">DESK ${desk.number}</span>
             <input type="text" 
                    class="status-name-input operator-name-input" 
-                   value="${desk.operatorName}"
+                   value="${Utils.escapeHtml(desk.operatorName)}"
                    data-desk-id="${desk.id}"
                    placeholder="オペレーター名"
             />
@@ -241,8 +244,7 @@ const Settings = {
             return;
         }
 
-        const filtered = statuses.filter(s => s.id !== statusId);
-        State.updateStatuses(filtered);
+        State.deleteStatus(statusId);
         this.renderStatusList();
     },
 

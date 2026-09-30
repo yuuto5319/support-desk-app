@@ -4,6 +4,7 @@
 
 const express = require('express');
 const db = require('../db');
+const { isValidStatus } = require('../validate');
 
 const router = express.Router();
 
@@ -77,6 +78,9 @@ router.put('/statuses', (req, res) => {
     if (!Array.isArray(statuses)) {
         return res.status(400).json({ error: 'ステータスの配列が必要です' });
     }
+    if (!statuses.every(isValidStatus)) {
+        return res.status(400).json({ error: 'ステータスの形式が正しくありません' });
+    }
 
     try {
         for (const status of statuses) {
@@ -113,8 +117,7 @@ router.delete('/statuses/:id', (req, res) => {
     const statusId = req.params.id;
 
     // Don't allow deleting default statuses
-    const defaultIds = ['available', 'calling', 'afterwork', 'break', 'away'];
-    if (defaultIds.includes(statusId)) {
+    if (db.DEFAULT_STATUS_IDS.includes(statusId)) {
         return res.status(400).json({ error: 'デフォルトのステータスは削除できません' });
     }
 
@@ -123,8 +126,19 @@ router.delete('/statuses/:id', (req, res) => {
 
         const allStatuses = db.statuses.getAll();
 
-        // Broadcast to all clients
+        // Broadcast to all clients (desks on the deleted status were moved back to 'available')
         const io = req.app.get('io');
+        io.to('desks').emit('desks:updated', db.desks.getAll().map(d => ({
+            id: d.id,
+            number: d.number,
+            operatorName: d.operator_name,
+            status: d.status_id,
+            statusName: d.status_name,
+            statusColor: d.status_color,
+            statusStartTime: new Date(d.status_start_time).getTime(),
+            callCount: d.call_count,
+            memo: d.memo || ''
+        })));
         io.to('desks').emit('statuses:updated', allStatuses.map(s => ({
             id: s.id,
             name: s.name,
