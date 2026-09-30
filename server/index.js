@@ -12,7 +12,9 @@ const jwt = require('jsonwebtoken');
 
 // Import database
 const db = require('./db');
-const { isValidTime, isNonEmptyString, isValidStatus } = require('./validate');
+const {
+    isValidTime, isNonEmptyString, isValidMemo, isValidStatus, parseId, SETTING_KEYS
+} = require('./validate');
 
 // Initialize Express
 const app = express();
@@ -84,12 +86,25 @@ io.on('connection', (socket) => {
         }));
     }
 
+    // Register a handler that never crashes the process on bad payloads
+    const on = (event, handler) => {
+        socket.on(event, (data) => {
+            try {
+                handler(data || {});
+            } catch (err) {
+                console.error(`Socket handler error (${event}):`, err);
+            }
+        });
+    };
+
     // Handle desk status change
-    socket.on('desk:changeStatus', (data) => {
+    on('desk:changeStatus', (data) => {
         const { deskId, statusId } = data;
+        if (!isNonEmptyString(deskId) || !isNonEmptyString(statusId)) return;
+        if (!db.statuses.getAll().some(s => s.id === statusId)) return;
 
         // Update database
-        db.desks.updateStatus(deskId, statusId);
+        if (!db.desks.updateStatus(deskId, statusId)) return;
 
         // Get updated desk data
         const desks = db.desks.getAll();
@@ -99,8 +114,9 @@ io.on('connection', (socket) => {
     });
 
     // Handle memo update
-    socket.on('desk:updateMemo', (data) => {
+    on('desk:updateMemo', (data) => {
         const { deskId, memo } = data;
+        if (!isNonEmptyString(deskId) || !isValidMemo(memo) || !db.desks.getById(deskId)) return;
 
         // Update database
         db.desks.updateMemo(deskId, memo);
@@ -119,26 +135,29 @@ io.on('connection', (socket) => {
     });
 
     // Handle operator update
-    socket.on('desk:updateOperator', (data) => {
+    on('desk:updateOperator', (data) => {
         const { deskId, operatorName } = data;
+        if (!isNonEmptyString(deskId) || !isNonEmptyString(operatorName, 50) || !db.desks.getById(deskId)) return;
 
-        db.desks.updateOperator(deskId, operatorName);
+        db.desks.updateOperator(deskId, operatorName.trim());
 
         const desks = db.desks.getAll();
         io.to('desks').emit('desks:updated', formatDesksForClient(desks));
     });
 
     // Handle settings update
-    socket.on('settings:update', (data) => {
+    on('settings:update', (data) => {
         const { key, value } = data;
+        if (!SETTING_KEYS.includes(key)) return;
 
         db.settings.set(key, value);
 
-        io.to('desks').emit('settings:updated', { key, value });
+        // Clients merge this object into their settings, so send { [key]: value }
+        io.to('desks').emit('settings:updated', { [key]: value });
     });
 
     // Handle status configuration update
-    socket.on('statuses:update', (data) => {
+    on('statuses:update', (data) => {
         const statuses = data?.statuses;
         if (!Array.isArray(statuses) || !statuses.every(isValidStatus)) return;
 
@@ -162,7 +181,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle status delete
-    socket.on('status:delete', (data) => {
+    on('status:delete', (data) => {
         const statusId = data?.statusId;
         if (!isNonEmptyString(statusId) || db.DEFAULT_STATUS_IDS.includes(statusId)) return;
 
@@ -174,7 +193,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle schedule add
-    socket.on('schedule:add', (data) => {
+    on('schedule:add', (data) => {
         const { deskId, title, memo, scheduledTime } = data || {};
         if (!isNonEmptyString(deskId) || !isNonEmptyString(title) || !isValidTime(scheduledTime)) return;
 
@@ -186,8 +205,9 @@ io.on('connection', (socket) => {
     });
 
     // Handle schedule delete
-    socket.on('schedule:delete', (data) => {
-        const { scheduleId } = data;
+    on('schedule:delete', (data) => {
+        const scheduleId = parseId(data.scheduleId);
+        if (!scheduleId) return;
 
         db.schedules.delete(scheduleId);
         io.to('desks').emit('schedule:deleted', { scheduleId });

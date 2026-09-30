@@ -153,6 +153,16 @@ function initializeTables() {
   const scheduleColumns = queryAll('PRAGMA table_info(schedules)').map(c => c.name);
   if (!scheduleColumns.includes('scheduled_date')) {
     db.run('ALTER TABLE schedules ADD COLUMN scheduled_date TEXT');
+    // Backfill from created_at (UTC 'YYYY-MM-DD HH:MM:SS') converted to the server's local date,
+    // so schedules registered today survive the first deleteOld()
+    const rows = queryAll('SELECT id, created_at FROM schedules');
+    for (const row of rows) {
+      const created = new Date(`${String(row.created_at).replace(' ', 'T')}Z`);
+      if (!isNaN(created)) {
+        db.run('UPDATE schedules SET scheduled_date = ? WHERE id = ?', [getLocalDateString(created), row.id]);
+      }
+    }
+    console.log(`Migrated schedules: added scheduled_date (${rows.length} rows backfilled)`);
   }
 
   console.log('Database tables initialized');

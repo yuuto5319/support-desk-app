@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isValidTime } = require('../validate');
+const { isValidTime, isNonEmptyString, isValidMemo, parseId } = require('../validate');
 
 // Get today's schedules
 router.get('/', (req, res) => {
@@ -35,11 +35,17 @@ router.post('/', (req, res) => {
     try {
         const { deskId, title, memo, scheduledTime } = req.body;
 
-        if (!deskId || !title || !scheduledTime) {
+        if (!isNonEmptyString(deskId) || !isNonEmptyString(title) || !scheduledTime) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         if (!isValidTime(scheduledTime)) {
             return res.status(400).json({ error: 'scheduledTime must be HH:MM' });
+        }
+        if (memo !== undefined && !isValidMemo(memo)) {
+            return res.status(400).json({ error: 'Invalid memo' });
+        }
+        if (!db.desks.getById(deskId)) {
+            return res.status(404).json({ error: 'Desk not found' });
         }
 
         const schedule = db.schedules.add(deskId, title, memo, scheduledTime);
@@ -61,7 +67,10 @@ router.post('/', (req, res) => {
 // Delete a schedule
 router.delete('/:id', (req, res) => {
     try {
-        const id = parseInt(req.params.id);
+        const id = parseId(req.params.id);
+        if (!id) {
+            return res.status(400).json({ error: 'Invalid schedule id' });
+        }
         db.schedules.delete(id);
 
         // Broadcast via Socket.io

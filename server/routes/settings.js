@@ -4,7 +4,7 @@
 
 const express = require('express');
 const db = require('../db');
-const { isValidStatus } = require('../validate');
+const { isValidStatus, SETTING_KEYS } = require('../validate');
 
 const router = express.Router();
 
@@ -33,6 +33,11 @@ router.get('/', (req, res) => {
  */
 router.patch('/', (req, res) => {
     const updates = req.body;
+
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)
+        || !Object.keys(updates).every(key => SETTING_KEYS.includes(key))) {
+        return res.status(400).json({ error: '変更できない設定が含まれています' });
+    }
 
     try {
         for (const [key, value] of Object.entries(updates)) {

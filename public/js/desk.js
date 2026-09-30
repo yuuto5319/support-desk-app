@@ -119,7 +119,7 @@ const Desk = {
     const hasImminentSchedule = nextSchedule && this.isImminent(nextSchedule.scheduled_time);
 
     return `
-      <div class="desk-card status-${Utils.escapeHtml(desk.status)} ${hasImminentSchedule ? 'schedule-imminent' : ''}" data-desk-id="${desk.id}">
+      <div class="desk-card status-${Utils.escapeHtml(desk.status)} ${hasImminentSchedule ? 'schedule-imminent' : ''}" data-desk-id="${Utils.escapeHtml(desk.id)}">
         <div class="desk-header">
           <span class="desk-number">DESK ${desk.number}</span>
           <span class="call-count">
@@ -152,7 +152,7 @@ const Desk = {
           ${statuses.map(status => `
             <button class="status-option ${desk.status === status.id ? 'active' : ''}"
                     data-status="${Utils.escapeHtml(status.id)}"
-                    data-desk-id="${desk.id}">
+                    data-desk-id="${Utils.escapeHtml(desk.id)}">
               <span class="dot" style="background-color: ${Utils.safeColor(status.color)}"></span>
               ${Utils.escapeHtml(status.name)}
             </button>

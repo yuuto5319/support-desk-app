@@ -100,7 +100,7 @@ const Settings = {
             <input type="text" 
                    class="status-name-input operator-name-input" 
                    value="${Utils.escapeHtml(desk.operatorName)}"
-                   data-desk-id="${desk.id}"
+                   data-desk-id="${Utils.escapeHtml(desk.id)}"
                    placeholder="オペレーター名"
             />
           </div>

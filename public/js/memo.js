@@ -43,18 +43,18 @@ const Memo = {
           <input type="text" 
                  class="memo-input" 
                  placeholder="メモを入力..." 
-                 data-desk-id="${desk.id}"
+                 data-desk-id="${Utils.escapeHtml(desk.id)}"
                  value=""
           />
-          <button class="memo-send-btn" data-desk-id="${desk.id}" title="メモを送信">
+          <button class="memo-send-btn" data-desk-id="${Utils.escapeHtml(desk.id)}" title="メモを送信">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22,2 15,22 11,13 2,9"/>
             </svg>
           </button>
         </div>
-        <div class="memo-display" id="memo-display-${desk.id}">${Utils.escapeHtml(desk.memo)}</div>
-        <button class="memo-history-btn" data-desk-id="${desk.id}">履歴を表示</button>
+        <div class="memo-display" id="memo-display-${Utils.escapeHtml(desk.id)}">${Utils.escapeHtml(desk.memo)}</div>
+        <button class="memo-history-btn" data-desk-id="${Utils.escapeHtml(desk.id)}">履歴を表示</button>
       </div>
     `;
     },
