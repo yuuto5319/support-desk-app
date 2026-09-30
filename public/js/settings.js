@@ -16,8 +16,8 @@ const Settings = {
             const view = document.getElementById('settingsView');
             if (!view.classList.contains('active')) return;
 
-            // Don't wipe an input the user is editing; re-render once they leave it
-            if (view.contains(document.activeElement) && document.activeElement.matches('input[type="text"]')) {
+            // Don't wipe an input the user is editing (text, color picker); re-render once they leave it
+            if (this.isEditing(view)) {
                 this.pendingRender = true;
                 return;
             }
@@ -29,12 +29,19 @@ const Settings = {
             if (!this.pendingRender) return;
             // Wait until focus has moved (and any 'change' handler has run)
             setTimeout(() => {
-                const view = document.getElementById('settingsView');
-                if (view.contains(document.activeElement) && document.activeElement.matches('input[type="text"]')) return;
+                if (this.isEditing(document.getElementById('settingsView'))) return;
                 this.pendingRender = false;
                 this.render();
             }, 0);
         });
+    },
+
+    /**
+     * Whether the user is currently editing an input inside the view
+     */
+    isEditing(view) {
+        const el = document.activeElement;
+        return view.contains(el) && el.matches('input[type="text"], input[type="color"]');
     },
 
     /**

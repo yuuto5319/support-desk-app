@@ -84,8 +84,13 @@ const Utils = {
     }
 
     if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
+      try {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      } catch (e) {
+        console.warn('Notification permission request failed:', e.message);
+        return false;
+      }
     }
 
     return false;

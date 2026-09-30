@@ -126,6 +126,9 @@ function initializeTables() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Stats and today's call counts filter by end_time (also created for existing databases)
+  db.run('CREATE INDEX IF NOT EXISTS idx_stats_history_end_time ON stats_history(end_time)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_stats_history_status_end ON stats_history(status_id, end_time)');
 
   // Settings table
   db.run(`
@@ -323,24 +326,23 @@ const dbOperations = {
       `);
     },
     /**
-     * Desks in the shape the frontend uses. callCount is today's count
-     * (completed calls in history + an ongoing call that started today).
+     * Desks in the shape the frontend uses. callCount is today's count:
+     * calls that overlap today (completed ones in history + an ongoing call).
      */
     getAllForClient: () => {
-      const today = getLocalDateString();
-      const todayStart = startOfLocalDay(new Date()).getTime();
+      const todayStartIso = startOfLocalDay(new Date()).toISOString();
       const counts = {};
       for (const row of queryAll(`
         SELECT desk_id, COUNT(*) as count FROM stats_history
-        WHERE status_id = 'calling' AND date = ?
+        WHERE status_id = 'calling' AND end_time > ?
         GROUP BY desk_id
-      `, [today])) {
+      `, [todayStartIso])) {
         counts[row.desk_id] = row.count;
       }
 
       return dbOperations.desks.getAll().map(d => {
         const statusStartTime = new Date(d.status_start_time).getTime();
-        const ongoingCall = d.status_id === 'calling' && statusStartTime >= todayStart ? 1 : 0;
+        const ongoingCall = d.status_id === 'calling' ? 1 : 0;
         return {
           id: d.id,
           number: d.number,
@@ -375,8 +377,27 @@ const dbOperations = {
       return runQuery('UPDATE desks SET memo = ?, updated_at = ? WHERE id = ?', [memo, now, id]);
     },
     updateOperator: (id, operatorName) => {
-      const now = new Date().toISOString();
-      return runQuery('UPDATE desks SET operator_name = ?, updated_at = ? WHERE id = ?', [operatorName, now, id]);
+      const desk = queryOne('SELECT * FROM desks WHERE id = ?', [id]);
+      if (!desk) return null;
+      if (desk.operator_name === operatorName) return true;
+
+      // Close the current status interval under the previous operator's name,
+      // then continue the same status under the new name from now
+      const now = new Date();
+      const nowIso = now.toISOString();
+      try {
+        db.run('BEGIN');
+        recordHistory(desk, now);
+        db.run('UPDATE desks SET operator_name = ?, status_start_time = ?, updated_at = ? WHERE id = ?',
+          [operatorName, nowIso, nowIso, id]);
+        db.run('COMMIT');
+      } catch (err) {
+        console.error('Operator update error:', err.message);
+        try { db.run('ROLLBACK'); } catch { /* no open transaction */ }
+        return false;
+      }
+      saveDatabase();
+      return true;
     }
   },
 
@@ -396,8 +417,10 @@ const dbOperations = {
   stats: {
     /**
      * Per-operator summary for [periodStart, now].
-     * Completed intervals come from stats_history (grouped by the local date they ended);
-     * the status each desk is currently in is added up to now.
+     * Every interval (completed ones in stats_history and each desk's current status)
+     * contributes only the part that overlaps the period, based on its UTC start/end
+     * times (the `date` column is not used, so older rows stored with UTC dates are fine).
+     * A call is counted in a period if it overlaps it.
      * Returns [{ operatorName, callCount, durations: { statusId: ms } }]
      */
     getSummary: (periodStart, now = new Date()) => {
@@ -406,35 +429,43 @@ const dbOperations = {
         if (!summary.has(name)) summary.set(name, { operatorName: name, callCount: 0, durations: {} });
         return summary.get(name);
       };
+      const periodStartMs = periodStart.getTime();
+      const add = (name, statusId, startMs, endMs) => {
+        const overlap = Math.min(endMs, now.getTime()) - Math.max(startMs, periodStartMs);
+        if (!(overlap > 0)) return;
+        const e = entry(name);
+        e.durations[statusId] = (e.durations[statusId] || 0) + overlap;
+        if (statusId === 'calling') e.callCount += 1;
+      };
 
       // Current operators first (in desk order), even with no activity yet
       const desks = dbOperations.desks.getAll();
       for (const desk of desks) entry(desk.operator_name);
 
       const rows = queryAll(`
-        SELECT operator_name, status_id, SUM(duration) as total_duration, COUNT(*) as count
+        SELECT operator_name, status_id, start_time, end_time
         FROM stats_history
-        WHERE date >= ? AND date <= ?
-        GROUP BY operator_name, status_id
-      `, [getLocalDateString(periodStart), getLocalDateString(now)]);
+        WHERE end_time > ?
+      `, [periodStart.toISOString()]);
       for (const row of rows) {
-        const e = entry(row.operator_name);
-        e.durations[row.status_id] = (e.durations[row.status_id] || 0) + (row.total_duration || 0);
-        if (row.status_id === 'calling') e.callCount += row.count;
+        add(row.operator_name, row.status_id,
+          new Date(row.start_time).getTime(), new Date(row.end_time).getTime());
       }
 
-      // Ongoing statuses, clipped to the period start
+      // Ongoing statuses
       for (const desk of desks) {
-        const started = new Date(desk.status_start_time).getTime();
-        const from = Math.max(started, periodStart.getTime());
-        const ongoing = now.getTime() - from;
-        if (ongoing <= 0) continue;
-        const e = entry(desk.operator_name);
-        e.durations[desk.status_id] = (e.durations[desk.status_id] || 0) + ongoing;
-        if (desk.status_id === 'calling' && started >= periodStart.getTime()) e.callCount += 1;
+        add(desk.operator_name, desk.status_id, new Date(desk.status_start_time).getTime(), now.getTime());
       }
 
       return [...summary.values()];
+    },
+
+    /**
+     * Status ids that appear in history since periodStart (includes deleted statuses)
+     */
+    getStatusIdsSince: (periodStart) => {
+      return queryAll('SELECT DISTINCT status_id FROM stats_history WHERE end_time > ?',
+        [periodStart.toISOString()]).map(r => r.status_id);
     }
   },
 
@@ -525,14 +556,23 @@ function applyStatusChange(desk, statusId, now) {
   const nowIso = now.toISOString();
 
   if (desk.status_id !== statusId) {
-    const duration = now.getTime() - new Date(desk.status_start_time).getTime();
-    db.run(`INSERT INTO stats_history (desk_id, operator_name, status_id, start_time, end_time, duration, date)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [desk.id, desk.operator_name, desk.status_id, desk.status_start_time, nowIso, duration, getLocalDateString(now)]);
+    recordHistory(desk, now);
   }
 
   db.run('UPDATE desks SET status_id = ?, status_start_time = ?, updated_at = ? WHERE id = ?',
     [statusId, nowIso, nowIso, desk.id]);
+}
+
+/**
+ * Write the desk's current status interval (status_start_time .. now) to stats_history.
+ * Does not save.
+ */
+function recordHistory(desk, now) {
+  const duration = now.getTime() - new Date(desk.status_start_time).getTime();
+  db.run(`INSERT INTO stats_history (desk_id, operator_name, status_id, start_time, end_time, duration, date)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [desk.id, desk.operator_name, desk.status_id, desk.status_start_time, now.toISOString(), duration,
+      getLocalDateString(now)]);
 }
 
 /**

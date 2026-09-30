@@ -36,6 +36,19 @@ function buildStats(period) {
     const statuses = db.statuses.getAll().map(s => ({ id: s.id, name: s.name, color: s.color }));
     const stats = db.stats.getSummary(periodStart, now);
 
+    // Keep columns for statuses that were deleted but still have time in this period
+    const known = new Set(statuses.map(s => s.id));
+    const deletedIds = db.stats.getStatusIdsSince(periodStart)
+        .filter(id => !known.has(id) && stats.some(s => s.durations[id] > 0));
+    deletedIds.forEach((id, i) => {
+        statuses.push({
+            id,
+            name: deletedIds.length > 1 ? `削除済みステータス${i + 1}` : '削除済みステータス',
+            color: '#6b7280',
+            deleted: true
+        });
+    });
+
     const totalCalls = stats.reduce((sum, s) => sum + s.callCount, 0);
     const totalCallingTime = stats.reduce((sum, s) => sum + (s.durations.calling || 0), 0);
 
