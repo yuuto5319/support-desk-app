@@ -86,9 +86,9 @@ const State = {
             this.notifyListeners();
         });
 
+        // Every client (including the sender) is notified once via this broadcast
         this.socket.on('memo:updated', (data) => {
-            const settings = this.getSettings();
-            if (settings.enableNotifications) {
+            if (Desk.getLocalSettings().enableNotifications) {
                 const desk = this.desks.find(d => d.id === data.deskId);
                 if (desk) {
                     Utils.sendNotification(

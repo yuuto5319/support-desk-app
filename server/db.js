@@ -291,12 +291,24 @@ const dbOperations = {
         [id, name, color, maxOrder + 1]);
     },
     delete: (id) => {
-      // Desks left on a deleted status would have no valid status, so move them back to 'available'
-      const desksInStatus = queryAll('SELECT id FROM desks WHERE status_id = ?', [id]);
-      for (const desk of desksInStatus) {
-        dbOperations.desks.updateStatus(desk.id, 'available');
+      // Desks left on a deleted status would have no valid status, so move them back to 'available'.
+      // Done in one transaction so a failure cannot leave the change half-applied.
+      try {
+        db.run('BEGIN');
+        const desksInStatus = queryAll('SELECT * FROM desks WHERE status_id = ?', [id]);
+        const now = new Date();
+        for (const desk of desksInStatus) {
+          applyStatusChange(desk, 'available', now);
+        }
+        db.run('DELETE FROM statuses WHERE id = ?', [id]);
+        db.run('COMMIT');
+      } catch (err) {
+        console.error('Status delete error:', err.message);
+        try { db.run('ROLLBACK'); } catch { /* no open transaction */ }
+        return false;
       }
-      return runQuery('DELETE FROM statuses WHERE id = ?', [id]);
+      saveDatabase();
+      return true;
     }
   },
 
@@ -310,6 +322,38 @@ const dbOperations = {
         ORDER BY d.number
       `);
     },
+    /**
+     * Desks in the shape the frontend uses. callCount is today's count
+     * (completed calls in history + an ongoing call that started today).
+     */
+    getAllForClient: () => {
+      const today = getLocalDateString();
+      const todayStart = startOfLocalDay(new Date()).getTime();
+      const counts = {};
+      for (const row of queryAll(`
+        SELECT desk_id, COUNT(*) as count FROM stats_history
+        WHERE status_id = 'calling' AND date = ?
+        GROUP BY desk_id
+      `, [today])) {
+        counts[row.desk_id] = row.count;
+      }
+
+      return dbOperations.desks.getAll().map(d => {
+        const statusStartTime = new Date(d.status_start_time).getTime();
+        const ongoingCall = d.status_id === 'calling' && statusStartTime >= todayStart ? 1 : 0;
+        return {
+          id: d.id,
+          number: d.number,
+          operatorName: d.operator_name,
+          status: d.status_id,
+          statusName: d.status_name,
+          statusColor: d.status_color,
+          statusStartTime,
+          callCount: (counts[d.id] || 0) + ongoingCall,
+          memo: d.memo || ''
+        };
+      });
+    },
     getById: (id) => {
       return queryOne('SELECT * FROM desks WHERE id = ?', [id]);
     },
@@ -317,25 +361,14 @@ const dbOperations = {
       const desk = queryOne('SELECT * FROM desks WHERE id = ?', [id]);
       if (!desk) return null;
 
-      const now = new Date().toISOString();
-
-      // Record previous status in history
-      if (desk.status_id !== statusId) {
-        const duration = Date.now() - new Date(desk.status_start_time).getTime();
-        const today = new Date().toISOString().split('T')[0];
-        runQuery(`INSERT INTO stats_history (desk_id, operator_name, status_id, start_time, end_time, duration, date)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [id, desk.operator_name, desk.status_id, desk.status_start_time, now, duration, today]);
-
-        // Increment call count if changing to 'calling'
-        if (statusId === 'calling') {
-          runQuery('UPDATE desks SET call_count = call_count + 1 WHERE id = ?', [id]);
-        }
+      try {
+        applyStatusChange(desk, statusId, new Date());
+      } catch (err) {
+        console.error('Status update error:', err.message);
+        return false;
       }
-
-      // Update desk status
-      return runQuery('UPDATE desks SET status_id = ?, status_start_time = ?, updated_at = ? WHERE id = ?',
-        [statusId, now, now, id]);
+      saveDatabase();
+      return true;
     },
     updateMemo: (id, memo) => {
       const now = new Date().toISOString();
@@ -344,9 +377,6 @@ const dbOperations = {
     updateOperator: (id, operatorName) => {
       const now = new Date().toISOString();
       return runQuery('UPDATE desks SET operator_name = ?, updated_at = ? WHERE id = ?', [operatorName, now, id]);
-    },
-    resetCallCount: () => {
-      return runQuery('UPDATE desks SET call_count = 0');
     }
   },
 
@@ -364,21 +394,47 @@ const dbOperations = {
 
   // Stats operations
   stats: {
-    getByPeriod: (startDate, endDate) => {
-      return queryAll('SELECT * FROM stats_history WHERE date >= ? AND date <= ? ORDER BY created_at DESC',
-        [startDate, endDate]);
-    },
-    getAggregatedByOperator: (startDate, endDate) => {
-      return queryAll(`
-        SELECT 
-          operator_name,
-          status_id,
-          SUM(duration) as total_duration,
-          COUNT(*) as count
-        FROM stats_history 
+    /**
+     * Per-operator summary for [periodStart, now].
+     * Completed intervals come from stats_history (grouped by the local date they ended);
+     * the status each desk is currently in is added up to now.
+     * Returns [{ operatorName, callCount, durations: { statusId: ms } }]
+     */
+    getSummary: (periodStart, now = new Date()) => {
+      const summary = new Map();
+      const entry = (name) => {
+        if (!summary.has(name)) summary.set(name, { operatorName: name, callCount: 0, durations: {} });
+        return summary.get(name);
+      };
+
+      // Current operators first (in desk order), even with no activity yet
+      const desks = dbOperations.desks.getAll();
+      for (const desk of desks) entry(desk.operator_name);
+
+      const rows = queryAll(`
+        SELECT operator_name, status_id, SUM(duration) as total_duration, COUNT(*) as count
+        FROM stats_history
         WHERE date >= ? AND date <= ?
         GROUP BY operator_name, status_id
-      `, [startDate, endDate]);
+      `, [getLocalDateString(periodStart), getLocalDateString(now)]);
+      for (const row of rows) {
+        const e = entry(row.operator_name);
+        e.durations[row.status_id] = (e.durations[row.status_id] || 0) + (row.total_duration || 0);
+        if (row.status_id === 'calling') e.callCount += row.count;
+      }
+
+      // Ongoing statuses, clipped to the period start
+      for (const desk of desks) {
+        const started = new Date(desk.status_start_time).getTime();
+        const from = Math.max(started, periodStart.getTime());
+        const ongoing = now.getTime() - from;
+        if (ongoing <= 0) continue;
+        const e = entry(desk.operator_name);
+        e.durations[desk.status_id] = (e.durations[desk.status_id] || 0) + ongoing;
+        if (desk.status_id === 'calling' && started >= periodStart.getTime()) e.callCount += 1;
+      }
+
+      return [...summary.values()];
     }
   },
 
@@ -462,6 +518,31 @@ const dbOperations = {
 };
 
 /**
+ * Record the desk's current status in history and switch it to statusId.
+ * Does not save; callers save (or commit) once.
+ */
+function applyStatusChange(desk, statusId, now) {
+  const nowIso = now.toISOString();
+
+  if (desk.status_id !== statusId) {
+    const duration = now.getTime() - new Date(desk.status_start_time).getTime();
+    db.run(`INSERT INTO stats_history (desk_id, operator_name, status_id, start_time, end_time, duration, date)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [desk.id, desk.operator_name, desk.status_id, desk.status_start_time, nowIso, duration, getLocalDateString(now)]);
+  }
+
+  db.run('UPDATE desks SET status_id = ?, status_start_time = ?, updated_at = ? WHERE id = ?',
+    [statusId, nowIso, nowIso, desk.id]);
+}
+
+/**
+ * Local midnight of the given date
+ */
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
  * Get today's date as YYYY-MM-DD in the server's local timezone
  */
 function getLocalDateString(date = new Date()) {
@@ -474,4 +555,6 @@ function getLocalDateString(date = new Date()) {
 // Built-in statuses that cannot be deleted
 const DEFAULT_STATUS_IDS = ['available', 'calling', 'afterwork', 'break', 'away'];
 
-module.exports = { initDatabase, saveDatabase, DEFAULT_STATUS_IDS, ...dbOperations };
+module.exports = {
+  initDatabase, saveDatabase, DEFAULT_STATUS_IDS, getLocalDateString, startOfLocalDay, ...dbOperations
+};

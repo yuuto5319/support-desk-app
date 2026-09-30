@@ -9,27 +9,19 @@ const { isNonEmptyString, isValidMemo } = require('../validate');
 const router = express.Router();
 
 /**
+ * Broadcast the latest desk list to all clients
+ */
+function broadcastDesks(req) {
+    req.app.get('io').to('desks').emit('desks:updated', db.desks.getAllForClient());
+}
+
+/**
  * GET /api/desks
  * Get all desks with status info
  */
 router.get('/', (req, res) => {
     try {
-        const desks = db.desks.getAll();
-
-        // Transform to match frontend format
-        const formattedDesks = desks.map(desk => ({
-            id: desk.id,
-            number: desk.number,
-            operatorName: desk.operator_name,
-            status: desk.status_id,
-            statusName: desk.status_name,
-            statusColor: desk.status_color,
-            statusStartTime: new Date(desk.status_start_time).getTime(),
-            callCount: desk.call_count,
-            memo: desk.memo || ''
-        }));
-
-        res.json(formattedDesks);
+        res.json(db.desks.getAllForClient());
     } catch (err) {
         console.error('Error fetching desks:', err);
         res.status(500).json({ error: 'デスク情報の取得に失敗しました' });
@@ -68,22 +60,15 @@ router.patch('/:id/status', (req, res) => {
         if (!db.statuses.getAll().some(s => s.id === statusId)) {
             return res.status(400).json({ error: 'ステータスが存在しません' });
         }
-        if (!db.desks.updateStatus(req.params.id, statusId)) {
+        const result = db.desks.updateStatus(req.params.id, statusId);
+        if (result === null) {
             return res.status(404).json({ error: 'デスクが見つかりません' });
         }
+        if (!result) {
+            return res.status(500).json({ error: 'ステータスの更新に失敗しました' });
+        }
 
-        const desks = db.desks.getAll();
-        const io = req.app.get('io');
-        io.to('desks').emit('desks:updated', desks.map(d => ({
-            id: d.id,
-            number: d.number,
-            operatorName: d.operator_name,
-            status: d.status_id,
-            statusStartTime: new Date(d.status_start_time).getTime(),
-            callCount: d.call_count,
-            memo: d.memo || ''
-        })));
-
+        broadcastDesks(req);
         res.json({ success: true });
     } catch (err) {
         console.error('Error updating desk status:', err);
@@ -112,18 +97,8 @@ router.patch('/:id/memo', (req, res) => {
             db.memoHistory.add(req.params.id, memo);
         }
 
-        const desks = db.desks.getAll();
-        const io = req.app.get('io');
-        io.to('desks').emit('desks:updated', desks.map(d => ({
-            id: d.id,
-            number: d.number,
-            operatorName: d.operator_name,
-            status: d.status_id,
-            statusStartTime: new Date(d.status_start_time).getTime(),
-            callCount: d.call_count,
-            memo: d.memo || ''
-        })));
-        io.to('desks').emit('memo:updated', { deskId: req.params.id, memo });
+        broadcastDesks(req);
+        req.app.get('io').to('desks').emit('memo:updated', { deskId: req.params.id, memo });
 
         res.json({ success: true });
     } catch (err) {
@@ -143,7 +118,8 @@ router.get('/:id/memo-history', (req, res) => {
             id: h.id,
             content: h.content,
             createdBy: h.created_by,
-            timestamp: new Date(h.created_at).getTime()
+            // created_at is SQLite CURRENT_TIMESTAMP (UTC without a zone suffix)
+            timestamp: new Date(`${String(h.created_at).replace(' ', 'T')}Z`).getTime()
         })));
     } catch (err) {
         console.error('Error fetching memo history:', err);
@@ -168,18 +144,7 @@ router.patch('/:id/operator', (req, res) => {
         }
         db.desks.updateOperator(req.params.id, operatorName.trim());
 
-        const desks = db.desks.getAll();
-        const io = req.app.get('io');
-        io.to('desks').emit('desks:updated', desks.map(d => ({
-            id: d.id,
-            number: d.number,
-            operatorName: d.operator_name,
-            status: d.status_id,
-            statusStartTime: new Date(d.status_start_time).getTime(),
-            callCount: d.call_count,
-            memo: d.memo || ''
-        })));
-
+        broadcastDesks(req);
         res.json({ success: true });
     } catch (err) {
         console.error('Error updating operator:', err);

@@ -7,26 +7,51 @@ const db = require('../db');
 
 const router = express.Router();
 
-/**
- * Helper: Get date range based on period
- */
-function getDateRange(period) {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+const PERIODS = ['today', 'week', 'month'];
 
+/**
+ * Helper: Get the period start (local midnight) for 'today' | 'week' | 'month'
+ * Weeks start on Monday.
+ */
+function getPeriodStart(period, now = new Date()) {
+    const today = db.startOfLocalDay(now);
     switch (period) {
         case 'week': {
-            const weekStart = new Date(today);
-            weekStart.setDate(today.getDate() - today.getDay() + 1);
-            return { start: weekStart.toISOString().split('T')[0], end: todayStr };
+            const daysSinceMonday = (today.getDay() + 6) % 7; // Sun=6, Mon=0
+            return new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysSinceMonday);
         }
-        case 'month': {
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            return { start: monthStart.toISOString().split('T')[0], end: todayStr };
-        }
-        default: // today
-            return { start: todayStr, end: todayStr };
+        case 'month':
+            return new Date(today.getFullYear(), today.getMonth(), 1);
+        default:
+            return today;
     }
+}
+
+/**
+ * Helper: Build stats for a period
+ */
+function buildStats(period) {
+    const now = new Date();
+    const periodStart = getPeriodStart(period, now);
+    const statuses = db.statuses.getAll().map(s => ({ id: s.id, name: s.name, color: s.color }));
+    const stats = db.stats.getSummary(periodStart, now);
+
+    const totalCalls = stats.reduce((sum, s) => sum + s.callCount, 0);
+    const totalCallingTime = stats.reduce((sum, s) => sum + (s.durations.calling || 0), 0);
+
+    return {
+        period,
+        start: db.getLocalDateString(periodStart),
+        end: db.getLocalDateString(now),
+        statuses,
+        stats,
+        totals: {
+            totalCalls,
+            totalCallingTime,
+            averageCallTime: totalCalls > 0 ? Math.round(totalCallingTime / totalCalls) : 0,
+            activeOperators: stats.filter(s => s.callCount > 0).length
+        }
+    };
 }
 
 /**
@@ -34,52 +59,10 @@ function getDateRange(period) {
  * Get statistics for the specified period
  */
 router.get('/', (req, res) => {
-    const period = req.query.period || 'today';
+    const period = PERIODS.includes(req.query.period) ? req.query.period : 'today';
 
     try {
-        const { start, end } = getDateRange(period);
-        const aggregated = db.stats.getAggregatedByOperator(start, end);
-        const desks = db.desks.getAll();
-
-        // Group by operator
-        const statsByOperator = {};
-
-        // Initialize with current desk data
-        for (const desk of desks) {
-            statsByOperator[desk.operator_name] = {
-                operatorName: desk.operator_name,
-                callCount: desk.call_count,
-                totalCallingTime: 0,
-                totalAvailableTime: 0,
-                totalAfterworkTime: 0,
-                totalBreakTime: 0,
-                totalAwayTime: 0
-            };
-        }
-
-        // Add aggregated data
-        for (const record of aggregated) {
-            if (!statsByOperator[record.operator_name]) continue;
-
-            const statusKey = `total${capitalize(record.status_id)}Time`;
-            if (statsByOperator[record.operator_name][statusKey] !== undefined) {
-                statsByOperator[record.operator_name][statusKey] = record.total_duration || 0;
-            }
-        }
-
-        const stats = Object.values(statsByOperator);
-        const totals = {
-            totalCalls: stats.reduce((sum, s) => sum + s.callCount, 0),
-            totalCallingTime: stats.reduce((sum, s) => sum + s.totalCallingTime, 0),
-            averageCallTime: 0,
-            activeOperators: stats.filter(s => s.callCount > 0).length
-        };
-
-        if (totals.totalCalls > 0) {
-            totals.averageCallTime = Math.round(totals.totalCallingTime / totals.totalCalls);
-        }
-
-        res.json({ stats, totals, period });
+        res.json(buildStats(period));
     } catch (err) {
         console.error('Error fetching stats:', err);
         res.status(500).json({ error: '統計の取得に失敗しました' });
@@ -91,51 +74,25 @@ router.get('/', (req, res) => {
  * Export statistics as CSV
  */
 router.get('/export', (req, res) => {
-    const period = req.query.period || 'today';
+    const period = PERIODS.includes(req.query.period) ? req.query.period : 'today';
 
     try {
-        const { start, end } = getDateRange(period);
-        const aggregated = db.stats.getAggregatedByOperator(start, end);
-        const desks = db.desks.getAll();
+        const { start, statuses, stats } = buildStats(period);
 
-        // Build data same as above
-        const statsByOperator = {};
-        for (const desk of desks) {
-            statsByOperator[desk.operator_name] = {
-                operatorName: desk.operator_name,
-                callCount: desk.call_count,
-                totalCallingTime: 0,
-                totalAvailableTime: 0,
-                totalAfterworkTime: 0,
-                totalBreakTime: 0,
-                totalAwayTime: 0
-            };
-        }
+        // Generate CSV (one duration column per status, including custom ones)
+        const BOM = '﻿';
+        const headers = ['オペレーター', '通話回数', '平均通話時間', ...statuses.map(s => neutralizeFormula(`${s.name}時間`))];
+        const rows = stats.map(s => {
+            const callingTime = s.durations.calling || 0;
+            return [
+                neutralizeFormula(s.operatorName),
+                s.callCount,
+                s.callCount > 0 ? formatDuration(callingTime / s.callCount) : '-',
+                ...statuses.map(status => formatDuration(s.durations[status.id] || 0))
+            ];
+        });
 
-        for (const record of aggregated) {
-            if (!statsByOperator[record.operator_name]) continue;
-            const statusKey = `total${capitalize(record.status_id)}Time`;
-            if (statsByOperator[record.operator_name][statusKey] !== undefined) {
-                statsByOperator[record.operator_name][statusKey] = record.total_duration || 0;
-            }
-        }
-
-        const stats = Object.values(statsByOperator);
-
-        // Generate CSV
-        const BOM = '\uFEFF';
-        const headers = ['オペレーター', '通話回数', '通話時間', '平均通話時間', '受付可時間', '後処理時間', '休憩時間'];
-        const rows = stats.map(s => [
-            s.operatorName,
-            s.callCount,
-            formatDuration(s.totalCallingTime),
-            s.callCount > 0 ? formatDuration(s.totalCallingTime / s.callCount) : '-',
-            formatDuration(s.totalAvailableTime),
-            formatDuration(s.totalAfterworkTime),
-            formatDuration(s.totalBreakTime)
-        ]);
-
-        const csv = BOM + [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+        const csv = BOM + [headers, ...rows].map(r => r.map(toCsvField).join(',')).join('\r\n');
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="support-desk-stats-${period}-${start}.csv"`);
@@ -147,10 +104,19 @@ router.get('/export', (req, res) => {
 });
 
 /**
- * Helper: Capitalize first letter
+ * Helper: Quote a CSV field
  */
-function capitalize(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
+function toCsvField(value) {
+    return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+/**
+ * Helper: Prefix user-entered text starting with = + - @ with ' so spreadsheet
+ * apps do not evaluate it as a formula
+ */
+function neutralizeFormula(text) {
+    const value = String(text ?? '');
+    return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 /**
@@ -171,3 +137,4 @@ function formatDuration(ms) {
 }
 
 module.exports = router;
+module.exports.getPeriodStart = getPeriodStart; // exposed for tests

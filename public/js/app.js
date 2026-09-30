@@ -165,7 +165,8 @@ const App = {
                 const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
                 document.documentElement.setAttribute('data-theme', newTheme);
-                State.updateSettings({ theme: newTheme });
+                // Theme is per browser, so it is not sent to the server
+                Desk.updateLocalSettings({ theme: newTheme });
 
                 this.updateThemeIcon(newTheme);
             });
@@ -173,11 +174,10 @@ const App = {
     },
 
     /**
-     * Apply saved theme
+     * Apply saved theme (per browser; falls back to the old shared server setting)
      */
     applyTheme() {
-        const settings = State.getSettings();
-        const theme = settings.theme || 'light';
+        const theme = Desk.getLocalSettings().theme || State.getSettings().theme || 'light';
 
         document.documentElement.setAttribute('data-theme', theme);
         this.updateThemeIcon(theme);
