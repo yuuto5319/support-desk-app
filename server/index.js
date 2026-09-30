@@ -6,7 +6,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 
@@ -15,24 +14,38 @@ const db = require('./db');
 const {
     isValidTime, isNonEmptyString, isValidMemo, isValidStatus, parseId, SETTING_KEYS
 } = require('./validate');
+const { isAllowedAddress, restrictToAllowedNetwork, subnets } = require('./network');
 
 // Initialize Express
 const app = express();
 const server = http.createServer(app);
 
 // Initialize Socket.io
+// The frontend is served from this server, so no CORS is configured (same-origin only).
+// Connections from outside the allowed networks are rejected at the handshake.
+// WebSocket is not covered by CORS, so the Origin header is also checked to stop
+// other websites (opened in an internal user's browser) from connecting.
 const io = new Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
+    allowRequest: (req, callback) => {
+        callback(null, isAllowedAddress(req.socket.remoteAddress) && isSameOrigin(req));
     }
 });
+
+function isSameOrigin(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true; // non-browser clients do not send Origin
+    try {
+        return new URL(origin).host === req.headers.host;
+    } catch {
+        return false;
+    }
+}
 
 // JWT Secret (in production, use environment variable)
 const JWT_SECRET = process.env.JWT_SECRET || 'support-desk-secret-key-change-in-production';
 
 // Middleware
-app.use(cors());
+app.use(restrictToAllowedNetwork);
 app.use(express.json());
 
 // Serve static files from public directory
@@ -256,12 +269,9 @@ async function startServer() {
 ║  Support Desk Monitor Server                       ║
 ║────────────────────────────────────────────────────║
 ║  Local:    http://localhost:${PORT}                   ║
-║────────────────────────────────────────────────────║
-║  Default Credentials:                              ║
-║    Admin: admin / admin123                         ║
-║    User:  user  / user123                          ║
 ╚════════════════════════════════════════════════════╝
     `);
+        console.log(`Allowed networks: ${subnets.join(', ')}`);
     });
 }
 
