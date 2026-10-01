@@ -169,7 +169,8 @@ const Desk = {
    */
   renderCard(desk, statuses) {
     const currentStatus = statuses.find(s => s.id === desk.status) || statuses[0];
-    const statusDuration = Date.now() - desk.statusStartTime;
+    // Clamp at 0: a device whose clock is behind the server would show negative times
+    const statusDuration = Math.max(0, Date.now() - desk.statusStartTime);
 
     // Get schedule info
     const schedules = State.getSchedules() || [];
@@ -290,7 +291,7 @@ const Desk = {
       if (card) {
         const timeElement = card.querySelector('.status-time');
         if (timeElement) {
-          const duration = Date.now() - desk.statusStartTime;
+          const duration = Math.max(0, Date.now() - desk.statusStartTime);
           timeElement.textContent = Utils.formatDuration(duration);
         }
       }

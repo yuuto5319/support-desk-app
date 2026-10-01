@@ -25,19 +25,27 @@ let db = null;
 async function initDatabase() {
   const SQL = await initSqlJs();
 
-  // Try to load existing database
-  try {
-    if (fs.existsSync(dbPath)) {
-      const buffer = fs.readFileSync(dbPath);
-      db = new SQL.Database(buffer);
-      console.log('Loaded existing database');
-    } else {
-      db = new SQL.Database();
-      console.log('Created new database');
+  // Load the existing database. If it cannot be read, stop instead of starting
+  // with an empty one: saving would overwrite the file and lose all data.
+  if (fs.existsSync(dbPath)) {
+    try {
+      db = new SQL.Database(fs.readFileSync(dbPath));
+      // sql.js opens any bytes without checking them, so verify the file before using it
+      const check = db.exec('PRAGMA quick_check');
+      const result = check[0]?.values[0]?.[0];
+      if (result !== 'ok') throw new Error(`integrity check failed: ${result}`);
+    } catch (err) {
+      throw new Error(
+        `データベースファイルを読み込めませんでした: ${dbPath}\n` +
+        `  (${err.message})\n` +
+        '  バックアップからこのファイルを復元してから、もう一度起動してください。\n' +
+        '  データを破棄して最初から始める場合は、このファイルを別の場所へ移動してから起動してください。'
+      );
     }
-  } catch (err) {
-    console.error('Error loading database, creating new one:', err.message);
+    console.log('Loaded existing database');
+  } else {
     db = new SQL.Database();
+    console.log('Created new database');
   }
 
   initializeTables();
@@ -48,13 +56,22 @@ async function initDatabase() {
 }
 
 /**
- * Save database to file
+ * Save database to file.
+ * Writes a temporary file and renames it over the database, so a crash or power loss
+ * during the write leaves the previous file intact instead of a truncated one.
  */
 function saveDatabase() {
   if (db) {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(dbPath, buffer);
+    const buffer = Buffer.from(db.export());
+    const tmpPath = `${dbPath}.tmp`;
+    const fd = fs.openSync(tmpPath, 'w');
+    try {
+      fs.writeFileSync(fd, buffer);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmpPath, dbPath);
   }
 }
 

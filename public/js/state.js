@@ -20,6 +20,10 @@ const State = {
     // Callback functions for state changes
     listeners: [],
 
+    // Whether the socket has connected at least once / initial data has been loaded
+    hasConnected: false,
+    dataLoaded: false,
+
     /**
      * Initialize state management
      */
@@ -46,15 +50,35 @@ const State = {
      * Initialize Socket.io connection
      */
     initSocket() {
-        // Load Socket.io client from CDN if not available
+        // The client script is served by this server, so it is missing only when
+        // the server could not be reached while the page was loading
         if (typeof io === 'undefined') {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.socket.io/4.7.4/socket.io.min.js';
-            script.onload = () => this.connectSocket();
-            document.head.appendChild(script);
-        } else {
-            this.connectSocket();
+            this.setConnectionStatus(false, 'サーバーに接続できません。サーバーが起動しているか確認し、ページを再読み込みしてください。');
+            return;
         }
+        this.connectSocket();
+    },
+
+    /**
+     * Show or hide the "not connected" banner
+     */
+    setConnectionStatus(connected, message) {
+        const banner = document.getElementById('connectionBanner');
+        if (!banner) return;
+        if (connected) {
+            banner.hidden = true;
+        } else {
+            banner.textContent = message || 'サーバーとの接続が切れています。再接続しています…（表示が最新ではない可能性があります）';
+            banner.hidden = false;
+        }
+    },
+
+    /**
+     * Reload everything from the server (after a reconnect or when the date changes)
+     */
+    async reload() {
+        await this.loadInitialData();
+        if (window.Schedule) Schedule.fetchSchedules();
     },
 
     /**
@@ -69,6 +93,17 @@ const State = {
 
         this.socket.on('connect', () => {
             console.log('Connected to server');
+            this.setConnectionStatus(true);
+            // Updates broadcast while disconnected (or a server restart) were missed,
+            // so fetch the current state again
+            if (this.hasConnected || !this.dataLoaded) {
+                this.reload();
+            }
+            this.hasConnected = true;
+        });
+
+        this.socket.on('connect_error', () => {
+            this.setConnectionStatus(false);
         });
 
         this.socket.on('desks:updated', (desks) => {
@@ -102,82 +137,37 @@ const State = {
 
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
+            this.setConnectionStatus(false);
         });
     },
 
     /**
-     * Load initial data from server
+     * Load desks, statuses and settings from the server.
+     * If the server cannot be reached, the previous data is kept and a banner is shown
+     * (made-up data would look like real desk statuses).
      */
     async loadInitialData() {
         try {
-            // Load desks
-            const desksRes = await fetch('/api/desks');
-            if (desksRes.ok) {
-                this.desks = await desksRes.json();
+            const [desksRes, statusesRes, settingsRes] = await Promise.all([
+                fetch('/api/desks'),
+                fetch('/api/settings/statuses'),
+                fetch('/api/settings')
+            ]);
+            if (!desksRes.ok || !statusesRes.ok || !settingsRes.ok) {
+                throw new Error('Failed to load data from server');
             }
 
-            // Load statuses
-            const statusesRes = await fetch('/api/settings/statuses');
-            if (statusesRes.ok) {
-                this.statuses = await statusesRes.json();
-            }
-
-            // Load settings
-            const settingsRes = await fetch('/api/settings');
-            if (settingsRes.ok) {
-                this.settings = await settingsRes.json();
-            }
+            this.desks = await desksRes.json();
+            this.statuses = await statusesRes.json();
+            this.settings = await settingsRes.json();
+            this.dataLoaded = true;
+            if (this.socket?.connected) this.setConnectionStatus(true);
 
             this.notifyListeners();
         } catch (err) {
             console.error('Error loading initial data:', err);
-            // Fall back to local data if server unavailable
-            this.initializeFallbackData();
+            this.setConnectionStatus(false);
         }
-    },
-
-    /**
-     * Initialize fallback data (when server is unavailable)
-     */
-    initializeFallbackData() {
-        if (this.desks.length === 0) {
-            const defaultOperators = [
-                '山田 太郎', '佐藤 花子', '鈴木 一郎', '田中 美咲',
-                '高橋 健太', '伊藤 さくら', '渡辺 龍也', '中村 愛',
-                '小林 翔太', '加藤 真由', '吉田 大輝', '山本 結衣'
-            ];
-
-            this.desks = defaultOperators.map((name, i) => ({
-                id: `desk-${i + 1}`,
-                number: i + 1,
-                operatorName: name,
-                status: 'available',
-                statusStartTime: Date.now(),
-                callCount: 0,
-                memo: ''
-            }));
-        }
-
-        if (this.statuses.length === 0) {
-            this.statuses = [
-                { id: 'available', name: '受付可', color: '#22c55e' },
-                { id: 'calling', name: '通話中', color: '#ef4444' },
-                { id: 'afterwork', name: '後処理', color: '#f59e0b' },
-                { id: 'break', name: '休憩', color: '#3b82f6' },
-                { id: 'away', name: '離席', color: '#6b7280' }
-            ];
-        }
-
-        if (Object.keys(this.settings).length === 0) {
-            this.settings = {
-                theme: 'light',
-                flipVertical: false,
-                flipHorizontal: false,
-                enableNotifications: true
-            };
-        }
-
-        this.schedules = [];
     },
 
     /**

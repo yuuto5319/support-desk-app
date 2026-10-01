@@ -122,6 +122,26 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Connection lost banner */
+.connection-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 300;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--status-calling);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.connection-banner[hidden] {
+  display: none;
+}
+
 .app-logo {
   display: flex;
   align-items: center;

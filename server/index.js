@@ -185,8 +185,10 @@ io.on('connection', (socket) => {
 
     // Handle schedule add
     on('schedule:add', (data) => {
-        const { deskId, title, memo, scheduledTime } = data || {};
+        const { deskId, title, memo, scheduledTime } = data;
         if (!isNonEmptyString(deskId) || !isNonEmptyString(title) || !isValidTime(scheduledTime)) return;
+        if (memo !== undefined && !isValidMemo(memo)) return;
+        if (!db.desks.getById(deskId)) return;
 
         const schedule = db.schedules.add(deskId, title, memo, scheduledTime);
 

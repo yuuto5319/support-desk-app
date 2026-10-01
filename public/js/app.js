@@ -206,9 +206,18 @@ const App = {
      * Start periodic updates for status times
      */
     startStatusTimeUpdates() {
+        let today = new Date().toDateString();
+
         // Update every second
         this.updateInterval = setInterval(() => {
             Desk.updateStatusTimes();
+
+            // After midnight, reload so yesterday's schedules and call counts are cleared
+            const now = new Date().toDateString();
+            if (now !== today) {
+                today = now;
+                State.reload();
+            }
         }, 1000);
     },
 

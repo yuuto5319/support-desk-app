@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles/index.css">
+  <link rel="stylesheet" href="styles/index.css?v=1.7">
 </head>
 
 <body>
@@ -88,6 +88,9 @@
         </button>
       </div>
     </header>
+
+    <!-- Shown while the server cannot be reached (see State.setConnectionStatus) -->
+    <div class="connection-banner" id="connectionBanner" role="status" aria-live="polite" hidden></div>
 
     <!-- Mobile Menu Overlay -->
     <div class="mobile-menu-overlay" id="mobileMenuOverlay">
@@ -349,14 +352,14 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/utils.js?v=1.6"></script>
-  <script src="js/state.js?v=1.6"></script>
-  <script src="js/memo.js?v=1.6"></script>
-  <script src="js/schedule.js?v=1.6"></script>
-  <script src="js/desk.js?v=1.6"></script>
-  <script src="js/stats.js?v=1.6"></script>
-  <script src="js/settings.js?v=1.6"></script>
-  <script src="js/app.js?v=1.6"></script>
+  <script src="js/utils.js?v=1.7"></script>
+  <script src="js/state.js?v=1.7"></script>
+  <script src="js/memo.js?v=1.7"></script>
+  <script src="js/schedule.js?v=1.7"></script>
+  <script src="js/desk.js?v=1.7"></script>
+  <script src="js/stats.js?v=1.7"></script>
+  <script src="js/settings.js?v=1.7"></script>
+  <script src="js/app.js?v=1.7"></script>
 </body>
 
 </html>

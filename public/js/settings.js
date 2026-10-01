@@ -92,6 +92,7 @@ const Settings = {
                value="${Utils.escapeHtml(status.name)}"
                data-status-id="${statusId}"
                placeholder="ステータス名"
+               maxlength="50"
         />
         <button class="status-delete-btn" data-status-id="${statusId}" title="削除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -126,6 +127,7 @@ const Settings = {
                    value="${Utils.escapeHtml(desk.operatorName)}"
                    data-desk-id="${Utils.escapeHtml(desk.id)}"
                    placeholder="オペレーター名"
+                   maxlength="50"
             />
           </div>
         `).join('')}
@@ -200,7 +202,15 @@ const Settings = {
 
         nameInputs.forEach(input => {
             input.addEventListener('change', (e) => {
-                this.updateStatus(e.target.dataset.statusId, { name: e.target.value });
+                const statusId = e.target.dataset.statusId;
+                const name = e.target.value.trim();
+                if (!name) {
+                    // The server rejects empty names; put the current name back
+                    alert('ステータス名を入力してください。');
+                    e.target.value = State.getStatuses().find(s => s.id === statusId)?.name || '';
+                    return;
+                }
+                this.updateStatus(statusId, { name });
             });
         });
 
@@ -222,17 +232,22 @@ const Settings = {
             input.addEventListener('change', async (e) => {
                 const deskId = e.target.dataset.deskId;
                 const name = e.target.value.trim();
-                if (name) {
-                    // Update via Socket or API
-                    if (State.socket?.connected) {
-                        State.socket.emit('desk:updateOperator', { deskId, operatorName: name });
-                    } else {
-                        await fetch(`/api/desks/${deskId}/operator`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ operatorName: name })
-                        });
-                    }
+                if (!name) {
+                    // An operator name is required; put the current name back
+                    alert('オペレーター名を入力してください。');
+                    e.target.value = State.getDesk(deskId)?.operatorName || '';
+                    return;
+                }
+
+                // Update via Socket or API
+                if (State.socket?.connected) {
+                    State.socket.emit('desk:updateOperator', { deskId, operatorName: name });
+                } else {
+                    await fetch(`/api/desks/${deskId}/operator`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operatorName: name })
+                    });
                 }
             });
         });
@@ -266,6 +281,11 @@ const Settings = {
         const defaultIds = ['available', 'calling', 'afterwork', 'break', 'away'];
         if (defaultIds.includes(statusId)) {
             alert('デフォルトのステータスは削除できません。');
+            return;
+        }
+
+        const status = statuses.find(s => s.id === statusId);
+        if (!confirm(`ステータス「${status?.name || ''}」を削除しますか？\nこのステータスのデスクは「受付可」に戻ります。`)) {
             return;
         }
 

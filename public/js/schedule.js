@@ -134,17 +134,25 @@ const Schedule = {
             select.appendChild(option);
         });
 
-        // Set default time to now + 30 mins, rounded to nearest 5 mins
-        const now = new Date();
-        now.setMinutes(now.getMinutes() + 30);
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(Math.ceil(now.getMinutes() / 5) * 5).padStart(2, '0');
-        this.dom.addForm.time.value = `${hours}:${minutes}`;
+        this.dom.addForm.time.value = this.getDefaultTime();
 
         this.dom.addForm.title.value = '';
         this.dom.addForm.memo.value = '';
 
         this.dom.addModal.classList.add('active');
+    },
+
+    /**
+     * Default time for a new schedule: 30 minutes from now, rounded up to 5 minutes.
+     * Schedules are for today only, so it stays at 23:55 at the latest.
+     */
+    getDefaultTime() {
+        const now = new Date();
+        let total = now.getHours() * 60 + now.getMinutes() + 30;
+        total = Math.min(Math.ceil(total / 5) * 5, 23 * 60 + 55);
+        const hours = String(Math.floor(total / 60)).padStart(2, '0');
+        const minutes = String(total % 60).padStart(2, '0');
+        return `${hours}:${minutes}`;
     },
 
     /**
@@ -288,3 +296,6 @@ const Schedule = {
         return scheduleTime < now;
     }
 };
+
+// Export for use in other modules
+window.Schedule = Schedule;
